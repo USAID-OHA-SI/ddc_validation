@@ -3,61 +3,78 @@
 ## PURPOSE: compare value outputs between USAID/SQLView and DDC
 ## LICENSE: MIT
 ## DATE:    2020-09-23
-## UPDATE:  
+## UPDATE:  2020-10-06
 
 # DEPENDENCIES ------------------------------------------------------------
 
 library(tidyverse)
 library(Wavelength)
 library(glamr)
+library(lubridate)
 
 # GLOBAL VARIABLES --------------------------------------------------------
 
 
 # IMPORT ------------------------------------------------------------------
 
+  #mer data (Q3i)
+    df_mer <- list.files("data/FY20Q3", full.names = TRUE) %>% 
+      map_dfr(read_csv, col_types = c(.default = "c", fy = "i", 
+                                      mer_results = "d", mer_targets = "d"))
+    
   #server output
     df_server <- hfr_read("data/HFR_2020.12_Tableau_20200924.zip")
   
   #DDC output
-    df_ddc <- return_latest("data", "HFR_2020.12.*csv") %>% 
-      hfr_read()
+    df_ddc <- return_latest("data", "hfr_2020.12.*csv") %>% 
+      read_csv(col_types = c(.default = "c", fy = "i", hfr_pd = "i",
+                             val = "d", mer_results = "d", mer_targets = "d"))
     
   #DDC status
-    df_status <- read_csv("data/cntry_hfr_sbmsn_status_Outputcsv.csv")
+    df_status <- return_latest("data", "status") %>% 
+      read_csv()
     
   #Error report
-    df_err <- read_csv("data/Error_sbmsn_output.csv")
+    df_err <- return_latest("data", "[E|e]rror") %>% 
+      read_csv()
 
 # MUNGE -------------------------------------------------------------------
 
-  #limit server data to just 2020.12 to match DDC
+  #mutate date for ddc data
+    df_ddc <- df_ddc %>% 
+      mutate(date = mdy(date))
+    
+  #limit to just 2020.12 to match DDC Tableau
     df_server <- df_server %>% 
         filter(hfr_pd == 12)
-  
-  #limit status to 2020.12
+    
     df_status <- df_status %>% 
       filter(rptng_prd == 202012)
   
+    df_err <- df_err %>% 
+      filter(rptng_prd == 2020.12)
+
+# SETUP COMPARISON --------------------------------------------------------
+
+  #function to filter 
+    set_comparision <- function(df, comp_ctry, ctry_ind){
+        dplyr::filter(df, {{ctry_ind}} == comp_ctry)
+    }
+    
   #comparison country
-    comp_ctry <- "Eswatini"
+    comp_ctry <- "Botswana"
     
-  #filter to comparison country
-    df_server_comp <- df_server %>% 
-      filter(countryname == comp_ctry)
-    
-    df_ddc_comp <- df_ddc %>% 
-      filter(countryname == comp_ctry)
-    
-    df_err_comp <- df_err %>% 
-      filter(cntry_nme == comp_ctry,
-             rptng_prd == 2020.12)
-    
-    df_status_comp <- df_status %>% 
-      filter(cntry_nme == comp_ctry)
+  #filter all dfs to comparison country
+    df_mer_comp <- set_comparision(df_mer, comp_ctry, countryname)
+    df_server_comp <- set_comparision(df_server, comp_ctry, countryname)
+    df_ddc_comp <- set_comparision(df_ddc, comp_ctry, countryname)
+    df_err_comp <- set_comparision(df_err, comp_ctry, cntry_nme)
+    df_status_comp <- set_comparision(df_status, comp_ctry, cntry_nme)
+
     
 # COMPARISON --------------------------------------------------------------
 
+    #review status
     glimpse(df_status_comp)
     
     df_err_comp %>% 
@@ -71,7 +88,39 @@ library(glamr)
       filter(vldtn_typ %in% c("missing_orgunitid_datim", "orgunituid_ou_check")) %>% 
       distinct(mech_or_prtnr_nme)
     
+    df_err_comp %>% 
+      filter(vldtn_typ == "mech_ou_check") %>% 
+      distinct(mech_code)
     
+    
+    #targets
+    tbl_server <- df_server_comp %>% 
+      filter(!is.na(val)) %>% 
+      count(date, mech_code, indicator, wt = mer_targets, name = "val_server")
+    
+    tbl_ddc <- df_ddc_comp %>%
+      filter(!is.na(val)) %>%
+      count(date, mech_code, indicator, wt = mer_targets, name = "val_ddc")
+    
+    full_join(tbl_server, tbl_ddc) %>% 
+      mutate(delta = val_ddc/val_server) %>%
+      arrange(date, indicator) %>% 
+      prinf()
+    
+    #results
+    tbl_server <- df_server_comp %>% 
+      filter(!is.na(val)) %>% 
+      count(date, mech_code, indicator, wt = mer_results, name = "val_server")
+    
+    tbl_ddc <- df_ddc_comp %>%
+      filter(!is.na(val)) %>%
+      count(date, mech_code, indicator, wt = mer_results, name = "val_ddc")
+    
+    full_join(tbl_server, tbl_ddc) %>% 
+      mutate(delta = val_ddc/val_server) %>%
+      arrange(date, indicator) %>% 
+      prinf()
+
     
     tbl_server <- df_server_comp %>% 
       filter(!is.na(val)) %>% 
@@ -85,7 +134,8 @@ library(glamr)
       mutate(delta = val_ddc/val_server) %>%
       arrange(date, indicator) %>% 
       prinf()
-
+    
+    
     tbl_server <- df_server_comp %>%
       filter(indicator == "HTS_TST_POS",
              val > 0) %>% 
