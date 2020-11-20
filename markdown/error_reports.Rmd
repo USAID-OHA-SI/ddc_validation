@@ -1,0 +1,189 @@
+---
+title: "HFR Error Report"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output: word_document
+params:
+  filename: "HFR_FY21_PD1_Lesotho_Karabo ea bophelo_20201116"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r functions, include=FALSE}
+is_error <- function(check_name){
+  unique(df_err_sbmsn$validation_check) %>% 
+    str_detect(check_name) %>% 
+    any()
+}
+
+count_error <- function(check_name){
+  df_err_sbmsn %>% 
+    filter(validation_check == check_name) %>% 
+    nrow() %>% 
+    comma(., 1)
+}
+```
+
+```{r sbmsn, include=FALSE}
+
+df_err_sbmsn <- df_err %>% 
+  filter(file_name == params$filename,
+         validation_check != "all_seven_indicators_present")
+
+pd <- df_err_sbmsn %>% 
+  filter(validation_check != "multiple_periods") %>% 
+  count(hfr_pd, sort = TRUE) %>%
+  slice(n = 1) %>% 
+  pull(hfr_pd)
+
+file <- unique(df_err_sbmsn$file_name)
+```
+
+
+### Background
+
+For FY21, HFRG has introduced a few changes to the overall submission process as we migrate to a new agency system, the Development Data Commons (DDC), that HFR is piloting. Traditionally, HFRG has managed much of the corrections to resolve submission errors we've received to get them into our initial database. Our error reports will evolve in the coming months, but this report provides the status of any issues we're finding and need you to resolve in order to get your HFR `r pd` submission into the database.  
+
+After you resolved the errors in your file highlighted below, you will need to resubmit using the Google Form found at https://tinyurl.com/hfr-submission-form. If you have any questions, please reach out to HFRG at oha_hfr@usaid.gov.
+
+
+### Submission file
+
+`r file`
+
+
+### Errors to resolve
+
+```{r ou, include=FALSE}
+if(is_error("op_unit_check")){
+  msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
+                       The submission contains {count_error('op_unit_check')} rows where *operatingunit does not match DATIM exactly*. Check the spelling or, if you are a regional program, that you have written the Operating Unit (e.g. Asia Region) or Country Name (eg Nepal) into column F in your submission. Rows where this does not match DATIM will be excluded.")
+}
+```
+
+`r if(is_error("op_unit_check")){msg_ou}`
+
+```{r orgunit, include=FALSE}
+
+if(is_error("orgunituid_ou_check")){
+  
+  issue_orgunits <- df_err_sbmsn %>%
+    filter(validation_check == "orgunituid_ou_check") %>% 
+    distinct(orgunit, orgunituid) %>% 
+    select(`Site/Community` = orgunit, `Wrong DATIM UID` = orgunituid) %>% 
+    arrange(`Site/Community`)
+  
+  msg_orgunits <- glue("**ORG UNIT UID ERROR**:
+                       The submission contains {nrow(issue_orgunits)} of wrong or missing facility/community UIDs (orgunituid) in column C of your submission. These must be resolved or the data will not be included in the HFR database.")
+}
+```
+
+`r if(is_error("orgunituid_ou_check")){msg_orgunits}`
+
+```{r org_table, echo=FALSE}
+
+if(is_error("orgunituid_ou_check")){
+  knitr::kable(issue_orgunits)
+}
+
+```
+
+
+```{r mechcode, include=FALSE}
+
+if(is_error("mech_ou_check")){
+  
+  issue_mechs <- df_err_sbmsn %>% 
+    filter(validation_check == "mech_ou_check") %>% 
+    distinct(mech_code) %>% 
+    pull() %>% 
+    paste(collapse = ', ')
+  
+  ou <- df_err_sbmsn %>% 
+    filter(validation_check == "mech_ou_check") %>% 
+    distinct(operatingunit) %>% 
+    pull() %>% 
+    paste(collapse = '/')
+  
+    msg_mechcode <- glue("**MECH CODE ERROR**:
+    The following mechanisms were flagged across {count_error('mech_ou_check')} rows as not existing in {ou} (sourced from your FY21 site validation in October) and need to be corrected. Rows with a mismatched mech_code will be excluded from our databse. Please review the following mismatched mechanisms found in column D of your submission question:   
+             {issue_mechs}")
+  }
+```
+
+`r if(is_error("mech_ou_check")){msg_mechcode}`
+
+```{r pd, include=FALSE}
+
+if(is_error("date_unknown")){
+  
+  msg_pd <- glue('**DATE ERRORr**:
+                 Your file had {count_error("date_unknown")} rows with an invalid or unknown date and the reported values have been dropped. Review the date in column A of your submission, ensuring that all dates are (a) in the correct year, (b) the first of the month, (c) a Monday if reporting weekly, or (d) formatted as yyyy-mm-dd. Highlight all the dates > right click > Format Cells > Custom > Type: yyyy-mm-dd')
+}
+```
+
+`r if(is_error("date_unknown")){msg_pd}`
+
+```{r multi_pd, include=FALSE}
+
+if(is_error("multiple_periods")){
+  
+  issue_pds <- df_err_sbmsn %>% 
+    distinct(hfr_pd)%>% 
+    arrange(hfr_pd) %>% 
+    pull(hfr_pd) %>% 
+    paste0(collapse = ", ")
+  
+  issue_dates <- df_err_sbmsn %>% 
+    distinct(date)%>% 
+    arrange(date) %>% 
+    pull(date) %>% 
+    paste0(collapse = ", ")
+  
+  msg_multi <- glue("**MULTIPLE PERIODS ERROR**:
+  Submissions must contain only one reporting period/month. Your submission has dates from the following periods: {issue_pds}. Please amend your column A of your submission to only include the date or dates from the reporting period. Here are the dates included: {issue_dates}")
+  
+}
+```
+
+`r if(is_error("multiple_periods")){msg_multi}`
+
+
+```{r neg_val, include=FALSE}
+
+if(is_error("val_check")){
+  
+  msg_negval <- glue('**NEGATIVE VALUE ERROR**:
+                     Your file had {count_error("val_check")} cell(s) with a negative value reported. Review all value columns (column L in the long template or columns H onwards in the wide template) and update your submission, ensuring no cells have negative values. All negative values will otherwise be removed from the dataset.')
+  
+}
+```
+
+`r if(is_error("val_check")){msg_negval}`
+
+```{r unknown_ind, include=FALSE}
+
+if(is_error("indicator_unknown_or_wrong")){
+
+  msg_ind <- glue('**UNKNOWN INDICATOR WARNING**:
+                  This is just a warning that your file had {count_error("indicator_unknown_or_wrong")} rows/cells that did not match an standard HFR indicator. Any indicators beyond the standard seven (HTS_TST, HTS_TST_POS, TX_NEW, TX_CURR, TX_MMD, VMMC_CIRC, PrEP_NEW) will not appear in the HFR Tableau workbooks. Additional indicators are acceptable, but we want to ensure you did not mistype one of the seven HFR indicators.')
+  
+}
+```
+
+`r if(is_error("indicator_unknown_or_wrong")){msg_ind}`
+
+
+```{r extra_disaggs, include=FALSE}
+
+if(is_error("otherdisaggregate_extras")){
+  
+  msg_extra <- glue('**NON-STANDARD DISAGGREGATE WARNING**:
+                    Your file had {count_error("otherdisaggregate_extras")} rows that did not match an accepted otherdisaggregate value. Any text values in otherdisaggregate other than the following will be replaced with NA: <3 months, 3-5 months, or 6 months or more')
+}
+
+```
+
+`r if(is_error("otherdisaggregate_extras")){msg_extra}`
