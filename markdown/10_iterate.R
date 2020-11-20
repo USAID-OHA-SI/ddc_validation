@@ -2,8 +2,8 @@
 ## AUTHOR:   A.CHAFETZ | USAID
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
-## DATE:     2020-11-20
-## UPDATED:  2020-11-19
+## DATE:     2020-11-19
+## UPDATED:  2020-11-21
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -25,7 +25,9 @@ library(googlesheets4)
 
    #Gdrive error report file
     gdrive_ddc_errors <- "1fXQx74mj2VzkUxOKocxKqd8uuWGKDjUZwM7pEzt9V3A"
-   
+    gdrive_ddc_errors_fldr <- "1_jFJOi7fMJ3tABEbRoMWgQjdQBBC4h_c"
+    ddc_errors_file <- "Extract_Error_2020-11-18_05_37.csv"
+    
   #Gdrive report folder 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
 
@@ -42,10 +44,16 @@ library(googlesheets4)
 
 # IMPORT ------------------------------------------------------------------
 
+  #download error report
+      import_drivefile(gdrive_ddc_errors_fldr, 
+                       filename =ddc_errors_file,
+                       zip = FALSE)
+      
   #DDC error reports
-    df_err <- read_sheet(as_sheets_id(gdrive_ddc_errors))
-    df_err <- read_csv("Data/DDC_2021.01i/Extract_Error_2020-11-18_05_37.csv", col_types = c(.default = "c"))
+    # df_err <- read_sheet(as_sheets_id(gdrive_ddc_errors))
+    df_err <- read_csv(file.path("Data", ddc_errors_file), col_types = c(.default = "c"))
   
+      
   #remove submitter from file name
     df_err <- df_err %>% 
       mutate(file_name = str_remove(file_name, " - .*"))
