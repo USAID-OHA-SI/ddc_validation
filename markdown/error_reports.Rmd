@@ -46,7 +46,7 @@ file <- unique(df_err_sbmsn$file_name)
 
 For FY21, HFRG has introduced a few changes to the overall submission process as we migrate to a new agency system, the Development Data Commons (DDC), that HFR is piloting. Traditionally, HFRG has managed much of the corrections to resolve submission errors we've received to get them into our initial database. Our error reports will evolve in the coming months, but this report provides the status of any issues we're finding and need you to resolve in order to get your HFR `r pd` submission into the database.  
 
-After you resolved the errors in your file highlighted below, you will need to resubmit using the Google Form found at https://tinyurl.com/hfr-submission-form. If you have any questions, please reach out to HFRG at oha_hfr@usaid.gov.
+After you resolved the errors in your file detailed below, you will need to resubmit using the Google Form found at https://tinyurl.com/hfr-submission-form. If you have any questions, please reach out to HFRG at oha_hfr@usaid.gov.
 
 
 ### Submission file
@@ -108,7 +108,7 @@ if(is_error("mech_ou_check")){
     paste(collapse = '/')
   
     msg_mechcode <- glue("**MECH CODE ERROR**:
-    The following mechanisms were flagged across {count_error('mech_ou_check')} rows as not existing in {ou} (sourced from your FY21 site validation in October) and need to be corrected. Rows with a mismatched mech_code will be excluded from our databse. Please review the following mismatched mechanisms found in column D of your submission question:   
+    The following mechanisms were flagged across {count_error('mech_ou_check')} rows as not existing in {ou} (sourced from your FY21 site validation in October) and need to be corrected. Rows with a mismatched mech_code will be excluded from our database. Please review the following mismatched mechanisms found in column D of your submission question:   
              {issue_mechs}")
   }
 ```
