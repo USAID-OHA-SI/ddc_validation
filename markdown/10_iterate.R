@@ -19,18 +19,12 @@ library(knitr)
 library(rmarkdown)
 library(here)
 library(googledrive)
-# library(googlesheets4)
+
 
 # GLOBAL VARIABLES --------------------------------------------------------
-
-   #Gdrive error report file
-    # gdrive_ddc_errors <- "1fXQx74mj2VzkUxOKocxKqd8uuWGKDjUZwM7pEzt9V3A"
-    # gdrive_ddc_errors_fldr <- "1_jFJOi7fMJ3tABEbRoMWgQjdQBBC4h_c"
-    # ddc_errors_file <- "Extract_Error_2020-11-18_05_37.csv"
     
   #Gdrive report folder 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
-
     
 
 # AUTHENTICATE ------------------------------------------------------------
@@ -55,6 +49,9 @@ library(googledrive)
       sort() %>%
       last()
     
+  #print latest
+    basename(latest_err_rpt)
+    
   #access latest
     s3_download(
       bucket = "gov-usaid",
@@ -73,12 +70,11 @@ library(googledrive)
 
 # ITERATE -----------------------------------------------------------------
 
-  #using error_report.Rmd
+  #using markdown/error_report.Rmd
     
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>% 
-      filter(validation_result == "Error",
-             str_detect(file_name, "FY21")) %>% 
+      # filter(category == "Error") %>%
       distinct(file_name) %>% 
       pull()
   
@@ -101,17 +97,20 @@ library(googledrive)
 
 # UPLOAD ------------------------------------------------------------------
 
+  #open google drive folder to move files to archive
+    drive_browse(as_id(gdrive_fldr))
 
-
-printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
-
-walk(.x = printed_reports,
-     .f = ~ drive_upload(.x, 
-                        path = as_id(gdrive_fldr), 
-                        name = str_remove(basename(.x), ".docx"),
-                        type = "document",
-                        overwrite = TRUE)
-     )
+  #identify reports that were created
+    printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
+  
+  #push to GDrive
+    walk(.x = printed_reports,
+         .f = ~ drive_upload(.x, 
+                            path = as_id(gdrive_fldr), 
+                            name = str_remove(basename(.x), ".docx"),
+                            type = "document",
+                            overwrite = TRUE)
+         )
 
 
 
