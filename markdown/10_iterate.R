@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2020-11-21
+## UPDATED:  2021-01-28
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -19,14 +19,14 @@ library(knitr)
 library(rmarkdown)
 library(here)
 library(googledrive)
-library(googlesheets4)
+# library(googlesheets4)
 
 # GLOBAL VARIABLES --------------------------------------------------------
 
    #Gdrive error report file
-    gdrive_ddc_errors <- "1fXQx74mj2VzkUxOKocxKqd8uuWGKDjUZwM7pEzt9V3A"
-    gdrive_ddc_errors_fldr <- "1_jFJOi7fMJ3tABEbRoMWgQjdQBBC4h_c"
-    ddc_errors_file <- "Extract_Error_2020-11-18_05_37.csv"
+    # gdrive_ddc_errors <- "1fXQx74mj2VzkUxOKocxKqd8uuWGKDjUZwM7pEzt9V3A"
+    # gdrive_ddc_errors_fldr <- "1_jFJOi7fMJ3tABEbRoMWgQjdQBBC4h_c"
+    # ddc_errors_file <- "Extract_Error_2020-11-18_05_37.csv"
     
   #Gdrive report folder 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
@@ -35,23 +35,35 @@ library(googlesheets4)
 
 # AUTHENTICATE ------------------------------------------------------------
   
-    #google sheets
-      gs4_auth()
-    
-    #google drive
-      drive_auth()
+    load_secrets()
     
 
 # IMPORT ------------------------------------------------------------------
 
-  #download error report
-      import_drivefile(gdrive_ddc_errors_fldr, 
-                       filename =ddc_errors_file,
-                       zip = FALSE)
-      
+  #identify latest error report
+    latest_err_rpt <- s3_objects(
+      bucket = "gov-usaid",
+      prefix = "ddc/uat/processed/hfr/outgoing/Detailed"
+    ) %>%
+      s3_unpack_keys() %>%
+      filter(
+        str_detect(
+          str_to_lower(sys_data_object),
+          pattern = "^detailed_error_output_.*.csv$")
+      ) %>%
+      pull(key) %>%
+      sort() %>%
+      last()
+    
+  #access latest
+    s3_download(
+      bucket = "gov-usaid",
+      object = latest_err_rpt,
+      filepath = file.path("Data", basename(latest_err_rpt)))
+    
   #DDC error reports
-    # df_err <- read_sheet(as_sheets_id(gdrive_ddc_errors))
-    df_err <- read_csv(file.path("Data", ddc_errors_file), col_types = c(.default = "c"))
+    df_err <- read_csv(file.path("Data", basename(latest_err_rpt)), 
+                       col_types = c(.default = "c"))
   
       
   #remove submitter from file name
