@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2021-01-28
+## UPDATED:  2021-02-02
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -30,9 +30,10 @@ library(googledrive)
 # AUTHENTICATE ------------------------------------------------------------
   
     load_secrets()
-    
 
-# IMPORT ------------------------------------------------------------------
+
+
+# DOWNLOAD ----------------------------------------------------------------
 
   #identify latest error report
     latest_err_rpt <- s3_objects(
@@ -52,23 +53,52 @@ library(googledrive)
   #print latest
     basename(latest_err_rpt)
     
-  #access latest
+  #download
     s3_download(
       bucket = "gov-usaid",
       object = latest_err_rpt,
       filepath = file.path("Data", basename(latest_err_rpt)))
     
+    
+  #identify latest submission status report
+    latest_err_status <- s3_objects(
+      bucket = "gov-usaid",
+      prefix = "ddc/uat/processed/hfr/outgoing/HFR_Submission"
+    ) %>%
+      s3_unpack_keys() %>%
+      arrange(last_modified) %>% 
+      pull(key) %>%
+      last() 
+    
+  #print latest
+    basename(latest_err_status)
+    
+  #download
+    s3_download(
+      bucket = "gov-usaid",
+      object = file_status,
+      filepath = file.path("./out/DDC", basename(latest_err_status))
+    )
+    
+    
+# IMPORT ------------------------------------------------------------------
+    
   #DDC error reports
     df_err <- read_csv(file.path("Data", basename(latest_err_rpt)), 
                        col_types = c(.default = "c"))
   
+  #DDC submission status
+    df_stat <- read_csv(file.path("./out/DDC", basename(latest_err_status)),
+                        col_types = c(.default = "c"))
       
   #remove submitter from file name
     df_err <- df_err %>% 
       mutate(file_name = str_remove(file_name, " - .*"))
 
+    df_stat <- df_stat %>% 
+      mutate(file_name = str_remove(file_name, " - .*"))
 
-# ITERATE -----------------------------------------------------------------
+ # ITERATE -----------------------------------------------------------------
 
   #using markdown/error_report.Rmd
     
@@ -90,7 +120,7 @@ library(googledrive)
     }
 
   #create reports
-    reports %>%
+    reports[1] %>%
       pwalk(render, 
             input = here("markdown","error_reports.Rmd"))
 
