@@ -46,7 +46,7 @@ library(googlesheets4)
 
   #download error report
       import_drivefile(gdrive_ddc_errors_fldr, 
-                       filename =ddc_errors_file,
+                       filename = ddc_errors_file,
                        zip = FALSE)
       
   #DDC error reports
