@@ -75,6 +75,18 @@ if(!is.null(nrow(df_stat_sbmsn))){
 
 Any errors highlighted in this section entail that related records of data were not import with your submission. Please review the issues below, resolve those errors and resubmit via the HFR Google Form.
 
+```{r any_err, include=FALSE}
+any_err <- df_err_sbmsn %>% 
+  distinct(category) %>% 
+  pull(category) %>% 
+  str_detect("error") %>% 
+  any()
+
+msg_anyerr <- "No error in your submission." 
+```
+
+`r if(any_err){msg_anyerr}`
+
 ```{r no_tabs, include=FALSE}
 if(is_error("err_tmp_no-valid-tabs")){
   msg_tabs <- glue("**NO VALID TABS ERROR**:
@@ -220,6 +232,18 @@ if(is_error("err_val_negative-value")){
 ### Warning Messages
 
 The follow items are warning messages, highlighting an issue with part of your submission. These issues may be for reference (e.g. extra tabs that are not imported) or may highlight issues (e.g. you reported on TX_CRR, which likely should have been TX_CURR). Please make any necessary changes as flagged below and resubmit through the HFR Google Form
+
+```{r any_warn, include=FALSE}
+any_warn <- df_err_sbmsn %>% 
+  distinct(category) %>% 
+  pull(category) %>% 
+  str_detect("warning") %>% 
+  any()
+
+msg_anywarn <- "No warning messages in your submission." 
+```
+
+`r if(any_warn){msg_anywarn}`
 
 ```{r dropped_tabs, include=FALSE}
 
