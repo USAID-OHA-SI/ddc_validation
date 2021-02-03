@@ -105,7 +105,6 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename") %>% 
-      filter(str_detect(file_name, "HealthLink_20210114")) %>% 
       distinct(file_name) %>% 
       pull()
   
