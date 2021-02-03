@@ -85,7 +85,7 @@ any_err <- df_err_sbmsn %>%
 msg_anyerr <- "No error in your submission." 
 ```
 
-`r if(any_err){msg_anyerr}`
+`r if(any_err == FALSE){msg_anyerr}`
 
 ```{r no_tabs, include=FALSE}
 if(is_error("err_tmp_no-valid-tabs")){
@@ -243,7 +243,7 @@ any_warn <- df_err_sbmsn %>%
 msg_anywarn <- "No warning messages in your submission." 
 ```
 
-`r if(any_warn){msg_anywarn}`
+`r if(any_warn == FALSE){msg_anywarn}`
 
 ```{r dropped_tabs, include=FALSE}
 
