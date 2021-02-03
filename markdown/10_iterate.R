@@ -109,8 +109,9 @@ library(googledrive)
   #using markdown/error_report.Rmd
     
   #pull distinct files with errors from the error report to iterate over
-    filename <- df_err %>% 
-      # filter(category == "Error") %>%
+    filename <- df_err %>%
+      filter(validation_type != "wrn_tmp_invalid-filename") %>% 
+      filter(str_detect(file_name, "HealthLink_20210114")) %>% 
       distinct(file_name) %>% 
       pull()
   
@@ -126,7 +127,7 @@ library(googledrive)
     }
 
   #create reports
-    reports[1] %>%
+    reports %>%
       pwalk(render, 
             input = here("markdown","error_reports.Rmd"))
 
