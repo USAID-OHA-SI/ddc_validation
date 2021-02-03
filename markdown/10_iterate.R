@@ -83,12 +83,6 @@ library(googledrive)
     
 # IMPORT ------------------------------------------------------------------
 
-  #download error report
-      # import_drivefile(gdrive_ddc_errors_fldr, 
-      #                  filename = ddc_errors_file,
-      #                  zip = FALSE)
-      
-
   #DDC error reports
     df_err <- read_csv(file.path("Data", basename(latest_err_rpt)), 
                        col_types = c(.default = "c"))
@@ -111,7 +105,6 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename") %>% 
-      filter(str_detect(file_name, "HealthLink_20210114")) %>% 
       distinct(file_name) %>% 
       pull()
   
