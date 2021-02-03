@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2020-11-21
+## UPDATED:  2021-02-02
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -19,54 +19,98 @@ library(knitr)
 library(rmarkdown)
 library(here)
 library(googledrive)
-library(googlesheets4)
+
 
 # GLOBAL VARIABLES --------------------------------------------------------
-
-   #Gdrive error report file
-    gdrive_ddc_errors <- "1fXQx74mj2VzkUxOKocxKqd8uuWGKDjUZwM7pEzt9V3A"
-    gdrive_ddc_errors_fldr <- "1_jFJOi7fMJ3tABEbRoMWgQjdQBBC4h_c"
-    ddc_errors_file <- "Extract_Error_2020-11-18_05_37.csv"
     
   #Gdrive report folder 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
-
     
 
 # AUTHENTICATE ------------------------------------------------------------
   
-    #google sheets
-      gs4_auth()
-    
-    #google drive
-      drive_auth()
-    
+    load_secrets()
 
+
+
+# DOWNLOAD ----------------------------------------------------------------
+
+  #identify latest error report
+    latest_err_rpt <- s3_objects(
+      bucket = "gov-usaid",
+      prefix = "ddc/uat/processed/hfr/outgoing/Detailed"
+    ) %>%
+      s3_unpack_keys() %>%
+      filter(
+        str_detect(
+          str_to_lower(sys_data_object),
+          pattern = "^detailed_error_output_.*.csv$")
+      ) %>%
+      pull(key) %>%
+      sort() %>%
+      last()
+    
+  #print latest
+    basename(latest_err_rpt)
+    
+  #download
+    s3_download(
+      bucket = "gov-usaid",
+      object = latest_err_rpt,
+      filepath = file.path("Data", basename(latest_err_rpt)))
+    
+    
+  #identify latest submission status report
+    latest_err_status <- s3_objects(
+      bucket = "gov-usaid",
+      prefix = "ddc/uat/processed/hfr/outgoing/HFR_Submission"
+    ) %>%
+      s3_unpack_keys() %>%
+      arrange(last_modified) %>% 
+      pull(key) %>%
+      last() 
+    
+  #print latest
+    basename(latest_err_status)
+    
+  #download
+    s3_download(
+      bucket = "gov-usaid",
+      object = latest_err_status,
+      filepath = file.path("./out/DDC", basename(latest_err_status))
+    )
+    
+    
 # IMPORT ------------------------------------------------------------------
 
   #download error report
-      import_drivefile(gdrive_ddc_errors_fldr, 
-                       filename = ddc_errors_file,
-                       zip = FALSE)
+      # import_drivefile(gdrive_ddc_errors_fldr, 
+      #                  filename = ddc_errors_file,
+      #                  zip = FALSE)
       
+
   #DDC error reports
-    # df_err <- read_sheet(as_sheets_id(gdrive_ddc_errors))
-    df_err <- read_csv(file.path("Data", ddc_errors_file), col_types = c(.default = "c"))
+    df_err <- read_csv(file.path("Data", basename(latest_err_rpt)), 
+                       col_types = c(.default = "c"))
   
+  #DDC submission status
+    df_stat <- read_csv(file.path("./out/DDC", basename(latest_err_status)),
+                        col_types = c(.default = "c"))
       
   #remove submitter from file name
     df_err <- df_err %>% 
       mutate(file_name = str_remove(file_name, " - .*"))
 
+    df_stat <- df_stat %>% 
+      mutate(file_name = str_remove(file_name, " - .*"))
 
-# ITERATE -----------------------------------------------------------------
+ # ITERATE -----------------------------------------------------------------
 
-  #using error_report.Rmd
+  #using markdown/error_report.Rmd
     
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>% 
-      filter(validation_result == "Error",
-             str_detect(file_name, "FY21")) %>% 
+      # filter(category == "Error") %>%
       distinct(file_name) %>% 
       pull()
   
@@ -82,24 +126,27 @@ library(googlesheets4)
     }
 
   #create reports
-    reports %>%
+    reports[1] %>%
       pwalk(render, 
             input = here("markdown","error_reports.Rmd"))
 
 
 # UPLOAD ------------------------------------------------------------------
 
+  #open google drive folder to move files to archive
+    drive_browse(as_id(gdrive_fldr))
 
-
-printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
-
-walk(.x = printed_reports,
-     .f = ~ drive_upload(.x, 
-                        path = as_id(gdrive_fldr), 
-                        name = str_remove(basename(.x), ".docx"),
-                        type = "document",
-                        overwrite = TRUE)
-     )
+  #identify reports that were created
+    printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
+  
+  #push to GDrive
+    walk(.x = printed_reports,
+         .f = ~ drive_upload(.x, 
+                            path = as_id(gdrive_fldr), 
+                            name = str_remove(basename(.x), ".docx"),
+                            type = "document",
+                            overwrite = TRUE)
+         )
 
 
 

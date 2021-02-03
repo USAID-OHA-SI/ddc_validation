@@ -3,7 +3,7 @@ title: "HFR Error Report"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: word_document
 params:
-  filename: "HFR_FY21_PD1_Lesotho_Karabo ea bophelo_20201116"
+  filename: "HFR_FY21_Dec_Ghana_JSI_20210115"
 ---
 
 
@@ -13,14 +13,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r functions, include=FALSE}
 is_error <- function(check_name){
-  unique(df_err_sbmsn$validation_check) %>% 
+  unique(df_err_sbmsn$validation_type) %>% 
     str_detect(check_name) %>% 
     any()
 }
 
 count_error <- function(check_name){
   df_err_sbmsn %>% 
-    filter(validation_check == check_name) %>% 
+    filter(validation_type == check_name) %>% 
     nrow() %>% 
     comma(., 1)
 }
@@ -29,11 +29,13 @@ count_error <- function(check_name){
 ```{r sbmsn, include=FALSE}
 
 df_err_sbmsn <- df_err %>% 
-  filter(file_name == params$filename,
-         validation_check != "all_seven_indicators_present")
+  filter(file_name == params$filename)
+
+df_stat_sbmsn <- df_stat %>% 
+  filter(file_name == params$filename)
 
 pd <- df_err_sbmsn %>% 
-  filter(validation_check != "multiple_periods") %>% 
+  filter(validation_type != "err_pd_multiple-periods") %>% 
   count(hfr_pd, sort = TRUE) %>%
   slice(n = 1) %>% 
   pull(hfr_pd)
@@ -53,24 +55,63 @@ After you resolved the errors in your file detailed below, you will need to resu
 
 `r file`
 
+```{r records_report, echo=FALSE}
+
+if(!is.null(nrow(df_stat_sbmsn))){
+  tbl_status <- df_stat_sbmsn %>% 
+    select(records_successfully_processed, records_not_processed_due_to_errors) %>% 
+    gather() %>% 
+    rename(Status = key,
+           n = value) %>%
+    mutate(Status = str_replace_all(Status, "_", " ") %>% str_to_sentence)
+  
+  knitr::kable(tbl_status)
+}
+
+```
+
 
 ### Errors to resolve
 
-```{r ou, include=FALSE}
-if(is_error("op_unit_check")){
-  msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
-                       The submission contains {count_error('op_unit_check')} rows where *operatingunit does not match DATIM exactly*. Check the spelling or, if you are a regional program, that you have written the Operating Unit (e.g. Asia Region) or Country Name (eg Nepal) into column F in your submission. Rows where this does not match DATIM will be excluded.")
+Any errors highlighted in this section entail that related records of data were not import with your submission. Please review the issues below, resolve those errors and resubmit via the HFR Google Form.
+
+```{r any_err, include=FALSE}
+any_err <- df_err_sbmsn %>% 
+  distinct(category) %>% 
+  pull(category) %>% 
+  str_detect("error") %>% 
+  any()
+
+msg_anyerr <- "No error in your submission." 
+```
+
+`r if(any_err == FALSE){msg_anyerr}`
+
+```{r no_tabs, include=FALSE}
+if(is_error("err_tmp_no-valid-tabs")){
+  msg_tabs <- glue("**NO VALID TABS ERROR**:
+                       The submission contains no tabs that could be imported. Review your submission and ensure that your data tab has 'HFR' in the tab name. No data were imported. Please resubmit after you fix the tab naming.")
 }
 ```
 
-`r if(is_error("op_unit_check")){msg_ou}`
+`r if(is_error("err_tmp_no-valid-tabs")){msg_tabs}`
+
+
+```{r ou, include=FALSE}
+if(is_error("err_org_unknown-ou")){
+  msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
+                       The submission contains {count_error('err_org_unknown-ou')} rows where *operatingunit does not match DATIM exactly*. Check the spelling or, if you are a regional program, that you have written the Operating Unit (e.g. Asia Region) or Country Name (eg Nepal) into column F in your submission. Rows where this does not match DATIM will be excluded.")
+}
+```
+
+`r if(is_error("err_org_unknown-ou")){msg_ou}`
 
 ```{r orgunit, include=FALSE}
 
-if(is_error("orgunituid_ou_check")){
+if(is_error("err_org_unknown-orgunituid")){
   
   issue_orgunits <- df_err_sbmsn %>%
-    filter(validation_check == "orgunituid_ou_check") %>% 
+    filter(validation_type == "err_org_unknown-orgunituid") %>% 
     distinct(orgunit, orgunituid) %>% 
     select(`Site/Community` = orgunit, `Wrong DATIM UID` = orgunituid) %>% 
     arrange(`Site/Community`)
@@ -80,110 +121,276 @@ if(is_error("orgunituid_ou_check")){
 }
 ```
 
-`r if(is_error("orgunituid_ou_check")){msg_orgunits}`
+`r if(is_error("err_org_unknown-orgunituid")){msg_orgunits}`
 
 ```{r org_table, echo=FALSE}
 
-if(is_error("orgunituid_ou_check")){
+if(is_error("err_org_unknown-orgunituid"))
   knitr::kable(issue_orgunits)
-}
 
 ```
 
 
 ```{r mechcode, include=FALSE}
 
-if(is_error("mech_ou_check")){
+if(is_error("err_mech_invalid-mech")){
   
   issue_mechs <- df_err_sbmsn %>% 
-    filter(validation_check == "mech_ou_check") %>% 
-    distinct(mech_code) %>% 
+    filter(validation_type == "err_mech_invalid-mech") %>% 
+    distinct(mech_code) %>%
+    arrange(mech_code) %>% 
     pull() %>% 
     paste(collapse = ', ')
   
-  ou <- df_err_sbmsn %>% 
-    filter(validation_check == "mech_ou_check") %>% 
-    distinct(operatingunit) %>% 
+  cntry <- df_err_sbmsn %>% 
+    filter(validation_type == "err_mech_invalid-mech") %>% 
+    distinct(countryname) %>% 
     pull() %>% 
     paste(collapse = '/')
   
     msg_mechcode <- glue("**MECH CODE ERROR**:
-    The following mechanisms were flagged across {count_error('mech_ou_check')} rows as not existing in {ou} (sourced from your FY21 site validation in October) and need to be corrected. Rows with a mismatched mech_code will be excluded from our database. Please review the following mismatched mechanisms found in column D of your submission question:   
-             {issue_mechs}")
+    The following mechanisms were flagged across {count_error('err_mech_invalid-mech')} rows as not existing in {cntry} (sourced from your FY21 site validation in October) and need to be corrected. Rows with a mismatched mech_code will be excluded from our database. Please review the following mismatched mechanisms found in column D of your submission question:   
+             \n{issue_mechs}")
   }
 ```
 
-`r if(is_error("mech_ou_check")){msg_mechcode}`
+`r if(is_error("err_mech_invalid-mech")){msg_mechcode}`
 
 ```{r pd, include=FALSE}
 
-if(is_error("date_unknown")){
+if(is_error("err_pd_unknown-date")){
   
-  msg_pd <- glue('**DATE ERRORr**:
-                 Your file had {count_error("date_unknown")} rows with an invalid or unknown date and the reported values have been dropped. Review the date in column A of your submission, ensuring that all dates are (a) in the correct year, (b) the first of the month, (c) a Monday if reporting weekly, or (d) formatted as yyyy-mm-dd. Highlight all the dates > right click > Format Cells > Custom > Type: yyyy-mm-dd')
+  issue_dates <- df_err_sbmsn %>% 
+    filter(validation_type == "err_pd_unknown-date") %>% 
+    distinct(additional_information) %>%
+    arrange(additional_information) %>% 
+    mutate(additional_information = 
+             case_when(
+               additional_information == "Unavailable" ~ "Unknown Format",
+               is.na(additional_information) ~ "[Blank]",
+               TRUE ~ additional_information)) %>% 
+    pull() %>% 
+    paste(collapse = ', ')
+  
+  msg_pd <- glue('**DATE ERROR**:
+                 Your file had {count_error("err_pd_unknown-date")} rows with an invalid or unknown date and the reported values have been dropped. Review the date in column A of your submission, ensuring that all dates are (a) in the correct year, (b) the first of the month or a Monday if reporting weekly, or (c) are all formatted the same, ideally as yyyy-mm-dd. To reformat, Highlight all the dates > right click > Format Cells > Custom > Type: yyyy-mm-dd. Please review the following dates found in column A of your submission question:
+                 \n{issue_dates}')
 }
 ```
 
-`r if(is_error("date_unknown")){msg_pd}`
+`r if(is_error("err_pd_unknown-date")){msg_pd}`
 
 ```{r multi_pd, include=FALSE}
 
-if(is_error("multiple_periods")){
+if(is_error("err_pd_multiple-periods")){
   
-  issue_pds <- df_err_sbmsn %>% 
-    distinct(hfr_pd)%>% 
-    arrange(hfr_pd) %>% 
+  curr_pd <- df_err_sbmsn %>% 
+    distinct(fy, hfr_pd)%>% 
+    unite(hfr_pd, c(fy, hfr_pd), sep = ".") %>% 
+    mutate(hfr_pd = na_if(hfr_pd, "NA.NA")) %>% 
     pull(hfr_pd) %>% 
     paste0(collapse = ", ")
-  
+    
   issue_dates <- df_err_sbmsn %>% 
-    distinct(date)%>% 
-    arrange(date) %>% 
-    pull(date) %>% 
+    filter(validation_type == "err_pd_multiple-periods") %>% 
+    distinct(additional_information)%>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
     paste0(collapse = ", ")
   
   msg_multi <- glue("**MULTIPLE PERIODS ERROR**:
-  Submissions must contain only one reporting period/month. Your submission has dates from the following periods: {issue_pds}. Please amend your column A of your submission to only include the date or dates from the reporting period. Here are the dates included: {issue_dates}")
+  Submissions must contain only one reporting period/month. Your submission has dates from the following multiple periods. Please amend your column A of your submission to only include the date or dates from this reporting period, {curr_pd}. The dates outside this period included: 
+  \n{issue_dates}")
   
 }
 ```
 
-`r if(is_error("multiple_periods")){msg_multi}`
+`r if(is_error("err_pd_multiple-periods")){msg_multi}`
 
 
 ```{r neg_val, include=FALSE}
 
-if(is_error("val_check")){
+if(is_error("err_val_negative-value")){
   
+   issue_val <- df_err_sbmsn %>% 
+    filter(validation_type == "err_val_negative-value") %>% 
+    mutate(info = glue("{mech_name} at {orgunit} reporting under {additional_information}"),
+           info = str_remove(info, " reporting under NA")) %>% 
+    distinct(info)%>% 
+    pull(info) %>% 
+    paste0(collapse = "\n ")
+    
   msg_negval <- glue('**NEGATIVE VALUE ERROR**:
-                     Your file had {count_error("val_check")} cell(s) with a negative value reported. Review all value columns (column L in the long template or columns H onwards in the wide template) and update your submission, ensuring no cells have negative values. All negative values will otherwise be removed from the dataset.')
+                     Your file had {count_error("err_val_negative-value")} cell(s) with a negative value reported. Review all value columns (column L in the long template or columns H onwards in the wide template) and update your submission, ensuring no cells have negative values. All negative values will otherwise be removed from the dataset. Negative values were found in the following places:
+                     \n{issue_val}')
   
 }
 ```
 
-`r if(is_error("val_check")){msg_negval}`
+`r if(is_error("err_val_negative-value")){msg_negval}`
+
+### Warning Messages
+
+The follow items are warning messages, highlighting an issue with part of your submission. These issues may be for reference (e.g. extra tabs that are not imported) or may highlight issues (e.g. you reported on TX_CRR, which likely should have been TX_CURR). Please make any necessary changes as flagged below and resubmit through the HFR Google Form
+
+```{r any_warn, include=FALSE}
+any_warn <- df_err_sbmsn %>% 
+  distinct(category) %>% 
+  pull(category) %>% 
+  str_detect("warning") %>% 
+  any()
+
+msg_anywarn <- "No warning messages in your submission." 
+```
+
+`r if(any_warn == FALSE){msg_anywarn}`
+
+```{r dropped_tabs, include=FALSE}
+
+if(is_error("wrn_tmp_dropped-tabs")){
+  dropped_tabs <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_tmp_dropped-tabs") %>% 
+    distinct(additional_information)%>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+  
+  msg_droppedtabs <- glue("**DROPPED TABS WARNING**:
+                    The submission included additional tabs that were not imported - any tab without HFR in the name. These are provided for reference only. If is there is tab here that should be included, make sure to change the tab name in submission and resubmit. 
+  \n{dropped_tabs}")
+}
+```
+
+`r if(is_error("wrn_tmp_dropped-tabs")){msg_droppedtabs}`
+
+```{r invalid_filename, include=FALSE}
+
+  msg_droppedtabs <- glue("**DROPPED TABS WARNING**:
+                    The file does not match the naming convention specified in the guidance. In most cases this is a result of using the month instead of the period number. For you submission next period, please revise to meet the naming convetion: HFR_FY[YY]_[Period]_[OU or Country Name]_[PARTNER - if applicable]_[DATE SUBMITTED as YYYYMMDD] 
+  \n{file}")
+```
+
+`r if(is_error("wrn_tmp_invalid-filename")){msg_droppedtabs}`
+
+
+```{r missing_ind, include=FALSE}
+
+if(is_error("wrn_ind_missing-indicator")){
+
+  ind_missing <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_missing-indicator") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+
+  msg_ind_missing <- glue('**MISSING INDICATOR WARNING**:
+                  Your file was missing some of the standard HFR indicators (HTS_TST, HTS_TST_POS, TX_NEW, TX_CURR, TX_MMD, VMMC_CIRC, PrEP_NEW) that were expected based on your FY21 site validation in October 2020 and/or FY21 MER reporting. The following indicators were missing:
+                  \n{ind_missing}')
+  
+}
+```
+
+`r if(is_error("wrn_ind_missing-indicator")){msg_ind_missing}`
+
 
 ```{r unknown_ind, include=FALSE}
 
-if(is_error("indicator_unknown_or_wrong")){
+if(is_error("wrn_ind_unknown-indicator")){
 
-  msg_ind <- glue('**UNKNOWN INDICATOR WARNING**:
-                  This is just a warning that your file had {count_error("indicator_unknown_or_wrong")} rows/cells that did not match an standard HFR indicator. Any indicators beyond the standard seven (HTS_TST, HTS_TST_POS, TX_NEW, TX_CURR, TX_MMD, VMMC_CIRC, PrEP_NEW) will not appear in the HFR Tableau workbooks. Additional indicators are acceptable, but we want to ensure you did not mistype one of the seven HFR indicators.')
+   ind_unknown <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_unknown-indicator") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+   
+  msg_ind_unknown <- glue('**UNKNOWN INDICATOR WARNING**:
+                  Your file had {count_error("wrn_ind_unknown-indicator")} rows/cells that did not match an standard HFR indicator. Any indicators beyond the standard seven (HTS_TST, HTS_TST_POS, TX_NEW, TX_CURR, TX_MMD, VMMC_CIRC, PrEP_NEW) will not appear in the HFR Tableau workbooks. Additional indicators are acceptable, but we want to ensure you did not mistype one of the seven HFR indicators.
+                  \n{ind_unknown}')
   
 }
 ```
 
-`r if(is_error("indicator_unknown_or_wrong")){msg_ind}`
+`r if(is_error("wrn_ind_unknown-indicator")){msg_ind_unknown}`
 
 
-```{r extra_disaggs, include=FALSE}
+```{r extra_ind, include=FALSE}
 
-if(is_error("otherdisaggregate_extras")){
+if(is_error("wrn_ind_extra-indicator")){
+
+   ind_extra <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_extra-indicator") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+   
+  msg_ind_extra <- glue('**EXTRA INDICATOR WARNING**:
+                  Your file had extra reporting in either sites/mechanism were not indicated in your FY21 site validation in October 2020 and/or FY21 MER reporting. The following indicators were extra:
+                  \n{ind_extra}')
   
-  msg_extra <- glue('**NON-STANDARD DISAGGREGATE WARNING**:
-                    Your file had {count_error("otherdisaggregate_extras")} rows that did not match an accepted otherdisaggregate value. Any text values in otherdisaggregate other than the following will be replaced with NA: <3 months, 3-5 months, or 6 months or more')
+}
+```
+
+`r if(is_error("wrn_ind_extra-indicator")){msg_ind_extra}`
+
+```{r unknown_sex, include=FALSE}
+if(is_error("wrn_ind_unknown-sex")){
+  
+  sex_unknown <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_unknown-sex") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+   
+  msg_sex_unknown <- glue('**UNKNOWN SEX WARNING**:
+                  Your file had {count_error("wrn_ind_unknown-sex")} cell(s) with a value for sex that was not "Male", "Female", or blank. The data have been incorporated into the dataset using "Unknown" for sex. Please resubmit if you would like to adjust the cells that have the following values for sex:
+                  \n{sex_unknown}')
 }
 
 ```
 
-`r if(is_error("otherdisaggregate_extras")){msg_extra}`
+`r if(is_error("wrn_ind_unknown-sex")){msg_sex_unknown}`
+
+```{r unknown_age, include=FALSE}
+if(is_error("wrn_ind_unknown-age")){
+  
+  age_unknown <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_unknown-age") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+   
+  msg_age_unknown <- glue('**UNKNOWN AGE WARNING**:
+                  Your file had {count_error("wrn_ind_unknown-age")} cell(s) with a value for sex that was not "<15", "15+", or blank. The data have been incorporated into the dataset using "Unknown" for age. Please resubmit if you would like to adjust the cells that have the following values for age:
+                  \n{age_unknown}')
+}
+
+```
+
+`r if(is_error("wrn_ind_unknown-age")){msg_age_unknown}`
+
+```{r unknown_otherdisagg, include=FALSE}
+if(is_error("wrn_ind_unknown-otherdisagg")){
+  
+  otherdisagg_unknown <- df_err_sbmsn %>% 
+    filter(validation_type == "wrn_ind_unknown-otherdisagg") %>% 
+    distinct(additional_information) %>% 
+    arrange(additional_information) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+   
+  msg_otherdisagg_unknown <- glue('**UNKNOWN OTHER DISAGGREGATE WARNING**:
+                  Your file had {count_error("wrn_ind_unknown-otherdisagg")} cell(s) with a value for "otherdisaggregate" other than the MMD disaggregates of <3 months, 3-5 months, or 6 months. The following entries in the submission will be replaced with NA:
+                  \n{otherdisagg_unknown}')
+}
+
+```
+
+`r if(is_error("wrn_ind_unknown-otherdisagg")){msg_otherdisagg_unknown}`
+
+
+
