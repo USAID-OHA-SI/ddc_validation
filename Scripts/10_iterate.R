@@ -122,7 +122,7 @@ library(googledrive)
   #create reports
     reports %>%
       pwalk(render, 
-            input = here("R","error_reports.Rmd"))
+            input = here("Scripts","error_reports.Rmd"))
 
 
 # UPLOAD ------------------------------------------------------------------
