@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2021-02-02
+## UPDATED:  2021-02-04
 
 
 # DEPENDENCIES ------------------------------------------------------------
