@@ -23,7 +23,7 @@ library(googledrive)
 
 # GLOBAL VARIABLES --------------------------------------------------------
     
-  #Gdrive report folder 
+  #Gdrive report folder (for upload) 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
     
 
@@ -104,7 +104,8 @@ library(googledrive)
     
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
-      filter(validation_type != "wrn_tmp_invalid-filename") %>% 
+      filter(validation_type != "wrn_tmp_invalid-filename",
+             processed_date >= "2021-01-14") %>% 
       distinct(file_name) %>% 
       pull()
   

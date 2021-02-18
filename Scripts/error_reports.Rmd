@@ -3,7 +3,7 @@ title: "HFR Error Report"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: word_document
 params:
-  filename: "HFR_FY21_Dec_Ghana_JSI_20210115"
+  filename: "HFR_FY21_Jan_Cameroon_ CHAMP_20210215"
 ---
 
 
@@ -96,6 +96,23 @@ if(is_error("err_tmp_no-valid-tabs")){
 
 `r if(is_error("err_tmp_no-valid-tabs")){msg_tabs}`
 
+```{r meta, include=FALSE}
+if(is_error("err_tmp_no-meta-tab")){
+  msg_meta <- glue("**NO META TAB ERROR**:
+                       The meta tab was dropped from your submission. This tab is necessary to conduct key validation checks, using the country and period selections. No data were imported as a result. To resolve, download a new template (v1.04) from the following link: [http://tinyurl.com/oha-hfr](http://tinyurl.com/oha-hfr)")
+}
+```
+
+`r if(is_error("err_tmp_no-meta-tab")){msg_meta}`
+
+```{r outdated, include=FALSE}
+if(is_error("err_tmp_old-version")){
+  msg_outdated <- glue("**OUTDATED TEMPLATE VERSION ERROR**:
+                       The meta tab of your submission indicates use of an outdated template (earlier than v1.04). This version structurally the same as old version, but is missing drop downs on the meta data tab necessary to conduct key validation checks, using the country and period selections. No data were imported as a result. To resolve, download a new template (v1.04) from the following link: [http://tinyurl.com/oha-hfr](http://tinyurl.com/oha-hfr)")
+}
+```
+
+`r if(is_error("err_tmp_old-version")){msg_outdated}`
 
 ```{r ou, include=FALSE}
 if(is_error("err_org_unknown-ou")){
@@ -105,6 +122,7 @@ if(is_error("err_org_unknown-ou")){
 ```
 
 `r if(is_error("err_org_unknown-ou")){msg_ou}`
+
 
 ```{r orgunit, include=FALSE}
 
@@ -130,6 +148,16 @@ if(is_error("err_org_unknown-orgunituid"))
 
 ```
 
+```{r mechcode_missing, include=FALSE}
+
+if(is_error("err_mech_missing-mech")){
+
+  msg_mechcode_missing <- glue("**MISSING MECH CODE ERROR**:
+    The submission has {count_error('err_mech_missing-mech')} rows that are missing a mech_code and need to be corrected. Rows with a missing mech_code will be excluded from our database. Please review the submission and add the correct mech_code to column D of your submission where it is missing")
+  }
+```
+
+`r if(is_error("err_mech_missing-mech")){msg_mechcode_missing}`
 
 ```{r mechcode, include=FALSE}
 
@@ -155,6 +183,31 @@ if(is_error("err_mech_invalid-mech")){
 ```
 
 `r if(is_error("err_mech_invalid-mech")){msg_mechcode}`
+
+
+```{r date_oob, include=FALSE}
+
+if(is_error("err_pd_out-of-bounds-date")){
+  issue_dateoob <- df_err_sbmsn %>% 
+      filter(validation_type == "err_pd_out-of-bounds-date") %>% 
+      distinct(additional_information) %>%
+      arrange(additional_information) %>% 
+      mutate(additional_information = 
+               case_when(
+                 additional_information == "Unavailable" ~ "Unknown Format",
+                 is.na(additional_information) ~ "[Blank]",
+                 TRUE ~ additional_information)) %>% 
+      pull() %>% 
+      paste(collapse = ', ')
+
+  msg_dateoob <- glue('**OUT OF BOUNDS DATE ERROR**:
+                   Your file had {count_error("err_pd_out-of-bounds-date")} rows with an out of bounds date and the reported values have been dropped. Out of bounds dates occur when dates (in column A) do not match the period selected in the meta tab. Ensure that the period in the meta tab is correct and then check the dates in column A. Dates should be formated/written as yyyy-mm-dd.  Please review the following dates found in column A of your submission and the meta tab period:
+                   \n{issue_dateoob}')
+}
+
+```
+
+`r if(is_error("err_pd_unknown-date")){msg_dateoob}`
 
 ```{r pd, include=FALSE}
 
@@ -185,9 +238,8 @@ if(is_error("err_pd_unknown-date")){
 if(is_error("err_pd_multiple-periods")){
   
   curr_pd <- df_err_sbmsn %>% 
-    distinct(fy, hfr_pd)%>% 
-    unite(hfr_pd, c(fy, hfr_pd), sep = ".") %>% 
-    mutate(hfr_pd = na_if(hfr_pd, "NA.NA")) %>% 
+    distinct(hfr_pd) %>% 
+    arrange(hfr_pd) %>% 
     pull(hfr_pd) %>% 
     paste0(collapse = ", ")
     
