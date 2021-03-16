@@ -120,6 +120,9 @@ library(googledrive)
       dir.create("markdown")
     }
 
+  #delete old files
+    # unlink("markdown/*")
+    
   #create reports
     reports %>%
       pwalk(render, 
