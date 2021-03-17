@@ -32,7 +32,148 @@ library(googledrive)
     load_secrets()
 
 
+# FUNCTIONS
 
+    #' @title Read sheets from S3 Objects / Excel
+    #' 
+    #' @param bucket
+    #' @param object_key
+    #' @param access_key
+    #' @param secret_key
+    #' 
+    s3_excel_sheets <- 
+      function(bucket, object_key,
+               access_key = NULL,
+               secret_key = NULL) {
+        
+        # Notification
+        print(basename(object_key))
+        
+        # Check keys
+        if (is.null(access_key))
+          access_key = glamr::get_s3key("access")
+        
+        if (is.null(secret_key))
+          secret_key = glamr::get_s3key("secret")
+        
+        # Create excel temp file
+        tmpfile <- base::tempfile(fileext = ".xlsx")
+        
+        # Save S3 Object to temp file
+        s3_obj <- aws.s3::save_object(
+          bucket = bucket,
+          object = object_key,
+          file = tmpfile,
+          key = access_key,
+          secret = secret_key
+        )
+        
+        # Read sheets from file
+        sheets <- readxl::excel_sheets(s3_obj)
+        
+        # Clean up 
+        file.remove(tmpfile)
+        
+        return(sheets)
+      }
+    
+    
+    #' @title connect_text
+    #' 
+    #' @param txt       String charactors
+    #' @param connector Charactor used as connector
+    #' 
+    connect_text <- function(txt, 
+                             connections = "[^a-zA-Z0-9]",
+                             connector = "_") {
+      
+      text <- base::sapply(txt, function(x) {
+        x %>% 
+          stringr::str_split(connections) %>% 
+          base::unlist() %>% 
+          stringi::stri_remove_empty() %>% 
+          base::paste0(collapse = connector)
+      }, USE.NAMES = FALSE)
+      
+      return(text)
+    }
+
+    
+    
+# CONFIRM SUBMISSIONS ------------------------------------------
+
+  # DDC / HFR Process Date
+    
+    pdate <- '2021-03-15'
+  
+    curr_date <- ymd(Sys.Date())
+  
+    curr_yr <- year(curr_date)
+    curr_mth <- month(curr_date)
+  
+  
+  # Raw submissions (latest files)
+    df_raws <- s3_objects(
+        bucket = 'gov-usaid',
+        prefix = "ddc/uat/raw/hfr/incoming",
+        n = Inf
+      ) %>% 
+      s3_unpack_keys() 
+  
+    df_raws <- df_raws %>% 
+      filter(last_modified >= pdate, nchar(sys_data_object) > 1) %>% 
+      select(key, filename = sys_data_object, last_modified) %>% 
+      arrange(filename) 
+
+    
+  # Raw Submissions - sheets
+    df_sheets <- df_raws %>% 
+      pull(key) %>%
+      map_dfr(function(x) {
+        tibble(
+          file_name = basename(x),
+          sheet_name = s3_excel_sheets("gov-usaid", x))
+        
+      }) %>% 
+      filter(str_detect(str_to_lower(trimws(sheet_name)), "hfr")) %>% 
+      mutate(
+        sheet_name_clean = connect_text(
+          str_replace_all(sheet_name, " |,", ""), # comma should be removed
+          "_"),
+        filename = paste0(str_remove(file_name, ".xlsx$"), "_", sheet_name_clean)
+      ) %>% 
+      arrange(file_name) 
+    
+    # HFR Processed
+      df_procs <- glamr::s3_objects(
+          bucket = 'gov-usaid',
+          prefix = "ddc/uat/processed/hfr/incoming/",
+          n = Inf
+        ) %>% 
+        glamr::s3_unpack_keys(df_objects = .)  %>% 
+        select(key, filename = sys_data_object, last_modified) %>% 
+        filter(last_modified >= pdate,
+               str_detect(str_to_lower(filename), "wide.csv$|long.csv$|limited.csv$")) %>%
+        arrange(filename) 
+    
+    # Compare S3 Sheets to Processed/hfr/incoming csv file
+      df_sheets_check <- df_sheets %>% 
+        left_join(
+          df_procs %>% 
+            mutate(
+              filename = str_remove(filename, "_Wide.csv$|_Long.csv|_Limited.csv$")
+            ), 
+          by = c("filename" = "filename")) %>% 
+        rename(proc_filename = filename) %>% 
+        arrange(file_name)
+        
+    
+    # List of files not being processed
+      df_sheets_check %>%
+        filter(is.na(key)) %>% 
+        distinct(file_name) %>% 
+        pull(file_name)
+    
 # DOWNLOAD ----------------------------------------------------------------
 
   #identify latest error report
@@ -97,9 +238,29 @@ library(googledrive)
 
     df_stat <- df_stat %>% 
       mutate(file_name = str_remove(file_name, " - .*"))
+    
+  # Check if non-processed files were reported in error outputs
+    df_sheets_check %>%
+      filter(is.na(key)) %>% 
+      distinct(file_name) %>% 
+      mutate(file_name = str_remove(file_name, " - .*")) %>% 
+      left_join(df_stat, by = "file_name") %>% 
+      filter(is.na(operatingunit)) %>% 
+      pull(file_name)
+    
+    df_sheets_check %>%
+      filter(is.na(key)) %>% 
+      distinct(file_name) %>% 
+      mutate(file_name = str_remove(file_name, " - .*")) %>% 
+      left_join(df_err, by = "file_name") %>% 
+      filter(is.na(processed_date)) %>% 
+      pull(file_name)
 
  # ITERATE -----------------------------------------------------------------
 
+  # TODO: add non-processed files to the error reports []
+  
+    
   #using markdown/error_report.Rmd
     
   #pull distinct files with errors from the error report to iterate over
