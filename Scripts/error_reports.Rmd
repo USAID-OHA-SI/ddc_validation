@@ -196,10 +196,21 @@ if(is_error("err_pd_out-of-bounds-date")){
                case_when(
                  additional_information == "Unavailable" ~ "Unknown Format",
                  is.na(additional_information) ~ "[Blank]",
+                 str_detect(additional_information, "Date: ,") ~ str_replace(additional_information, "Date: ,", "Date: [Blank],"),
                  TRUE ~ additional_information)) %>% 
       pull() %>% 
       paste(collapse = ', ')
+  
+  hfrpd <- str_extract(issue_dateoob, "[:digit:]{6}$")
 
+  if(is.na(hfrpd) == FALSE){
+     mo <- month((ymd(glue("{hfrpd}01")) - months(3)), label = T)
+  
+     meta_sel <- glue("FY{str_sub(hfrpd,3,4)} {mo}")
+     
+     issue_dateoob <- str_replace_all(issue_dateoob, hfrpd, meta_sel)
+  }
+ 
   msg_dateoob <- glue('**OUT OF BOUNDS DATE ERROR**:
                    Your file had {count_error("err_pd_out-of-bounds-date")} rows with an out of bounds date and the reported values have been dropped. Out of bounds dates occur when dates (in column A) do not match the period selected in the meta tab. Ensure that the period in the meta tab is correct and then check the dates in column A. Dates should be formated/written as yyyy-mm-dd.  Please review the following dates found in column A of your submission and the meta tab period:
                    \n{issue_dateoob}')
@@ -207,7 +218,7 @@ if(is_error("err_pd_out-of-bounds-date")){
 
 ```
 
-`r if(is_error("err_pd_unknown-date")){msg_dateoob}`
+`r if(is_error("err_pd_out-of-bounds-date")){msg_dateoob}`
 
 ```{r pd, include=FALSE}
 
@@ -479,5 +490,25 @@ if(is_error("wrn_ind_unknown-otherdisagg")){
 
 `r if(is_error("wrn_ind_unknown-otherdisagg")){msg_otherdisagg_unknown}`
 
+```{r nonnum, include=FALSE}
 
+if(is_error("wrn_val_non-numeric-value ")){
+
+   issue_val <- df_err_sbmsn %>%
+    filter(validation_type == "wrn_val_non-numeric-value ") %>%
+    mutate(info = glue("{mech_name} at {orgunit} reporting under {additional_information}"),
+           info = str_remove(info, " reporting under NA")) %>%
+    distinct(info)%>%
+    pull(info) %>%
+    paste0(collapse = "\n ")
+
+  msg_nonnum <- glue('**NEGATIVE VALUE ERROR**:
+                     Your file had {count_error("wrn_val_non-numeric-value ")} cell(s) with a non-numeric value reported. Review all value columns (column L in the long template or columns H onwards in the wide template) and update your submission, ensuring no cells have non-numeric values. All non-numeric values will otherwise be removed from the dataset. Non-numeric values were found in the following places:
+                     \n{issue_val}')
+
+}
+
+```
+
+`r if(is_error("wrn_val_non-numeric-value ")){msg_nonnum}`
 

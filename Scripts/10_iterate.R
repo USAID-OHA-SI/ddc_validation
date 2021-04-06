@@ -105,7 +105,7 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename",
-             processed_date >= "2021-01-14") %>% 
+             processed_date >= "2021-03-01") %>% 
       distinct(file_name) %>% 
       pull()
   
@@ -121,7 +121,7 @@ library(googledrive)
     }
 
   #delete old files
-    # unlink("markdown/*")
+    unlink("markdown/*")
     
   #create reports
     reports %>%
