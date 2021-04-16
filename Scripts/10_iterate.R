@@ -104,7 +104,7 @@ library(googledrive)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-03-15'
+    pdate <- '2021-04-15'
   
     curr_date <- ymd(Sys.Date())
   
@@ -234,10 +234,16 @@ library(googledrive)
       
   #remove submitter from file name
     df_err <- df_err %>% 
-      mutate(file_name = str_remove(file_name, " - .*"))
+      mutate(file_name_n = file_name %>% 
+               str_remove(".xlsx$") %>% 
+               str_replace(" - ", " [") %>% 
+               paste0("]"))
 
     df_stat <- df_stat %>% 
-      mutate(file_name = str_remove(file_name, " - .*"))
+      mutate(file_name_n = file_name %>% 
+               str_remove(".xlsx$") %>% 
+               str_replace(" - ", " [") %>% 
+               paste0("]"))
     
   # Check if non-processed files were reported in error outputs
     df_sheets_check %>%
@@ -266,7 +272,7 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename",
-             processed_date >= "2021-03-01") %>% 
+             processed_date >= "2021-04-15") %>% 
       distinct(file_name) %>% 
       pull()
   
