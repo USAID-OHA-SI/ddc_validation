@@ -26,6 +26,7 @@ library(googledrive)
   #Gdrive report folder (for upload) 
     gdrive_fldr <- "1UESgXMSNqQs4VlE7gicU0PQLnykvKB9s"
     
+    bkt_name <- "gov-usaid"
 
 # AUTHENTICATE ------------------------------------------------------------
   
@@ -99,12 +100,21 @@ library(googledrive)
     }
 
     
+    #' @title Create a Temp Directory
+    #' @return Full folder path
+    #'
+    temp_folder <- function() {
+      tmp <- fs::dir_create(fs::file_temp())
+      cat("Missing files saved to", tmp)
+      
+      return(tmp)
+    }
     
 # CONFIRM SUBMISSIONS ------------------------------------------
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-03-15'
+    pdate <- '2021-04-15'
   
     curr_date <- ymd(Sys.Date())
   
@@ -114,11 +124,11 @@ library(googledrive)
   
   # Raw submissions (latest files)
     df_raws <- s3_objects(
-        bucket = 'gov-usaid',
+        bucket = bkt_name,
         prefix = "ddc/uat/raw/hfr/incoming",
-        n = Inf
-      ) %>% 
-      s3_unpack_keys() 
+        n = Inf,
+        unpack_keys = TRUE
+      ) 
   
     df_raws <- df_raws %>% 
       filter(last_modified >= pdate, nchar(sys_data_object) > 1) %>% 
@@ -131,8 +141,9 @@ library(googledrive)
       pull(key) %>%
       map_dfr(function(x) {
         tibble(
+          key_raw = x,
           file_name = basename(x),
-          sheet_name = s3_excel_sheets("gov-usaid", x))
+          sheet_name = s3_excel_sheets(bkt_name, x))
         
       }) %>% 
       filter(str_detect(str_to_lower(trimws(sheet_name)), "hfr")) %>% 
@@ -146,14 +157,15 @@ library(googledrive)
     
     # HFR Processed
       df_procs <- glamr::s3_objects(
-          bucket = 'gov-usaid',
+          bucket = bkt_name,
           prefix = "ddc/uat/processed/hfr/incoming/",
-          n = Inf
+          n = Inf,
+          unpack_keys = TRUE
         ) %>% 
-        glamr::s3_unpack_keys(df_objects = .)  %>% 
-        select(key, filename = sys_data_object, last_modified) %>% 
+        select(key_proc = key, filename = sys_data_object, last_modified) %>% 
         filter(last_modified >= pdate,
-               str_detect(str_to_lower(filename), "wide.csv$|long.csv$|limited.csv$")) %>%
+               str_detect(str_to_lower(filename), 
+                          "wide.csv$|long.csv$|limited.csv$")) %>%
         arrange(filename) 
     
     # Compare S3 Sheets to Processed/hfr/incoming csv file
@@ -161,18 +173,83 @@ library(googledrive)
         left_join(
           df_procs %>% 
             mutate(
-              filename = str_remove(filename, "_Wide.csv$|_Long.csv|_Limited.csv$")
+              filename = str_remove(filename, 
+                                    "_Wide.csv$|_Long.csv|_Limited.csv$")
             ), 
           by = c("filename" = "filename")) %>% 
         rename(proc_filename = filename) %>% 
         arrange(file_name)
         
-    
     # List of files not being processed
       df_sheets_check %>%
-        filter(is.na(key)) %>% 
+        filter(is.na(key_proc)) %>% 
         distinct(file_name) %>% 
         pull(file_name)
+      
+    # Check files with extra column / rows
+      fkeys <- df_sheets_check %>%
+        filter(is.na(key_proc)) %>%  
+        distinct(key_raw) %>% 
+        pull(key_raw) 
+      
+      tmp <- temp_folder()
+      
+      fkeys %>% 
+        map(~s3_download(bucket = bkt_name,
+                         object = .x,
+                         filepath = file.path(tmp, basename(.x))))
+      
+      raw_files <- list.files(tmp, ".xlsx$", full.names = TRUE)
+      
+    # Check meta tabs for unprocessed files
+      df_metadata <- raw_files %>% 
+        map_dfr(function(x) {
+          
+          meta_tab <- 'meta'
+          vars <- c("Operating Unit/Country", 
+                    "HFR FY and Period",
+                    "Template version",
+                    "Template type")
+          
+          sheets <- readxl::excel_sheets(path = x)
+          
+          if (meta_tab %in% str_to_lower(sheets)) {
+            df_meta <- readxl::read_excel(path = x, 
+                               sheet = 'meta',
+                               skip = 1,
+                               range = "B2:C5",
+                               col_names = c("var", "value"))
+          } else {
+            df_meta <- tibble(
+              var = vars,
+              value = NA
+            )
+          }
+          
+          df_meta %>% 
+            mutate(filename = basename(x),
+                   var = if_else(var == "Operating Unit", 
+                                 "Operating Unit/Country", 
+                                 var)) %>% 
+            pivot_wider(names_from = var, values_from = value) %>% 
+            janitor::clean_names()
+        }) 
+      
+    # Check format of date values
+      # raw_files %>% 
+      #   first() %>% 
+      #   readxl::excel_sheets(path = .) %>% 
+      #   subset(str_detect(., "HFR")) %>% 
+      #   first() %>% 
+      #   readxl::read_excel(raw_files %>% first(), 
+      #                      sheet = .,
+      #                      skip = 1,
+      #                      guess_max = Inf,
+      #                      col_types = c("date", 
+      #                                    rep("text", 10),
+      #                                    val = "numeric")) 
+      
+      #unlink(tmp, recursive = TRUE)
     
 # DOWNLOAD ----------------------------------------------------------------
 
@@ -277,7 +354,7 @@ library(googledrive)
     )
 
   #create markdown folder under wd if it doesn't exist
-    if(dir.exists("markdown") == FALSE){
+    if(dir.exists("markdown") == FALSE) {
       dir.create("markdown")
     }
 

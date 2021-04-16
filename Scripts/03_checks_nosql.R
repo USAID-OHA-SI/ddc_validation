@@ -43,6 +43,7 @@ pd_date <- "2020-10-01"
 #DDC initial status + error reports
   df_status <- return_latest(fldr_ddc, "Status") %>% 
     vroom()
+  
   df_err <- return_latest(fldr_ddc, "Error") %>%  
     vroom()
   
