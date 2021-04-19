@@ -186,7 +186,7 @@ library(googledrive)
         distinct(file_name) %>% 
         pull(file_name)
       
-    # Check files with extra column / rows
+    # Download non-processed files
       fkeys <- df_sheets_check %>%
         filter(is.na(key_proc)) %>%  
         distinct(key_raw) %>% 
@@ -235,19 +235,39 @@ library(googledrive)
             janitor::clean_names()
         }) 
       
-    # Check format of date values
-      # raw_files %>% 
-      #   first() %>% 
-      #   readxl::excel_sheets(path = .) %>% 
-      #   subset(str_detect(., "HFR")) %>% 
-      #   first() %>% 
-      #   readxl::read_excel(raw_files %>% first(), 
-      #                      sheet = .,
-      #                      skip = 1,
-      #                      guess_max = Inf,
-      #                      col_types = c("date", 
-      #                                    rep("text", 10),
-      #                                    val = "numeric")) 
+    # Check extra columns / rows
+      df_structure <- raw_files %>% 
+        map_dfr(function(x) {
+          
+          
+          sheets <- readxl::excel_sheets(path = x)
+          
+          df <- sheets %>% 
+            str_subset("meta", negate = TRUE) %>% 
+            map_dfr(function(y) {
+              
+              readxl::read_excel(path = x, sheet = y, skip = 1, col_types = "text") %>% 
+                mutate(file_name = basename(x), sheet_name = y) %>% 
+                pivot_longer(cols = -ends_with("_name"),
+                             names_to = "variable", 
+                             values_to = "value") 
+                
+              
+            })
+          
+          return(df)
+        }) 
+      
+    # Empty Column
+      df_structure %>% 
+        distinct(file_name, sheet_name, variable) %>% 
+        filter(str_detect(variable, '^\\.')) %>% 
+        prinf()
+      
+    # Empty Rows
+      df_structure %>% 
+        filter(variable == 'date', is.na(value)) %>% 
+        prinf()
       
       #unlink(tmp, recursive = TRUE)
     
