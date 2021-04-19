@@ -58,13 +58,13 @@ After you resolved the errors in your file detailed below, you will need to resu
 ```{r records_report, echo=FALSE}
 
 if(!is.null(nrow(df_stat_sbmsn))){
-  tbl_status <- df_stat_sbmsn %>% 
-    select(records_successfully_processed, records_not_processed_due_to_errors) %>% 
-    gather() %>% 
+  tbl_status <- df_stat_sbmsn %>%
+    select(records_successfully_processed, records_not_processed_due_to_errors) %>%
+    gather() %>%
     rename(Status = key,
            n = value) %>%
     mutate(Status = str_replace_all(Status, "_", " ") %>% str_to_sentence)
-  
+
   knitr::kable(tbl_status)
 }
 
@@ -196,10 +196,21 @@ if(is_error("err_pd_out-of-bounds-date")){
                case_when(
                  additional_information == "Unavailable" ~ "Unknown Format",
                  is.na(additional_information) ~ "[Blank]",
+                 str_detect(additional_information, "Date: ,") ~ str_replace(additional_information, "Date: ,", "Date: [Blank],"),
                  TRUE ~ additional_information)) %>% 
       pull() %>% 
       paste(collapse = ', ')
+  
+  hfrpd <- str_extract(issue_dateoob, "[:digit:]{6}$")
 
+  if(is.na(hfrpd) == FALSE){
+     mo <- month((ymd(glue("{hfrpd}01")) - months(3)), label = T)
+  
+     meta_sel <- glue("FY{str_sub(hfrpd,3,4)} {mo}")
+     
+     issue_dateoob <- str_replace_all(issue_dateoob, hfrpd, meta_sel)
+  }
+ 
   msg_dateoob <- glue('**OUT OF BOUNDS DATE ERROR**:
                    Your file had {count_error("err_pd_out-of-bounds-date")} rows with an out of bounds date and the reported values have been dropped. Out of bounds dates occur when dates (in column A) do not match the period selected in the meta tab. Ensure that the period in the meta tab is correct and then check the dates in column A. Dates should be formated/written as yyyy-mm-dd.  Please review the following dates found in column A of your submission and the meta tab period:
                    \n{issue_dateoob}')
@@ -207,7 +218,7 @@ if(is_error("err_pd_out-of-bounds-date")){
 
 ```
 
-`r if(is_error("err_pd_unknown-date")){msg_dateoob}`
+`r if(is_error("err_pd_out-of-bounds-date")){msg_dateoob}`
 
 ```{r pd, include=FALSE}
 
@@ -320,13 +331,33 @@ if(is_error("wrn_tmp_dropped-tabs")){
 
 ```{r invalid_filename, include=FALSE}
 
-#   msg_invalidfilename <- glue("**INVALID FILE NAME WARNING**:
-#                     The file does not match the naming convention specified in the guidance. In most cases this is a result of using the month instead of the period number. For you submission next period, please revise to meet the naming convetion: HFR\\_FY[YY]\\_[Period]\\_[OU or Country Name]\\_[PARTNER - if applicable]\\_[DATE SUBMITTED as YYYYMMDD] 
-#   \n{file}")
-# 
-# `r if(is_error("wrn_tmp_invalid-filename")){msg_invalidfilename}`
+  msg_invalidfilename <- glue("**INVALID FILE NAME WARNING**:
+                    The file does not match the naming convention specified in the guidance. In most cases this is a result of using the month instead of the period number. For you submission next period, please revise to meet the naming convetion: HFR\\_FY[YY]\\_[Period]\\_[OU or Country Name]\\_[PARTNER - if applicable]\\_[DATE SUBMITTED as YYYYMMDD]
+  \n{file}")
+
+#`r if(is_error("wrn_tmp_invalid-filename")){msg_invalidfilename}`
 ```
 
+
+
+```{r nonnumeric_val, include=FALSE}
+
+if(is_error("wrn_val_non-numeric-value")){
+  
+  issue_nonnumeric <- df_err_sbmsn %>%
+    filter(validation_type == "wrn_val_non-numeric-value",
+           !is.na(additional_information)) %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_issue_nonnumeric <- glue("**NON-NUMERIC WARNING**:
+                       The submission contains {count_error('wrn_val_non-numeric-value')} of non-numeric result values in column L of your long format submission or column H onwards of a wide format submission. Review the submission to determine what is being entered so as to not continue with non-numeric values in future submissions.
+                       \n{issue_nonnumeric}")
+}
+```
+
+`r if(is_error("wrn_val_non-numeric-value")){msg_issue_nonnumeric}`
 
 ```{r missing_ind, include=FALSE}
 
@@ -458,6 +489,3 @@ if(is_error("wrn_ind_unknown-otherdisagg")){
 ```
 
 `r if(is_error("wrn_ind_unknown-otherdisagg")){msg_otherdisagg_unknown}`
-
-
-
