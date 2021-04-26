@@ -114,6 +114,23 @@ if(is_error("err_tmp_old-version")){
 
 `r if(is_error("err_tmp_old-version")){msg_outdated}`
 
+```{r invalid_col, include=FALSE}
+if(is_error("err_tmp_invalid-column")){
+  
+  issue_cols <- df_err_sbmsn %>%
+    filter(validation_type == "err_tmp_invalid-column") %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_invalid_col <- glue("**INVALID COLUMN ERROR**:
+                       The submission contains {count_error('err_tmp_invalid-column')} column(s) not found in the original submission template. As a result, the entire tab was not processed into the system. Please ensure that you are using one of the existing templates (v1.04 or later) to submit the file. Templates are available here (tinyurl.com/oha-hfr). The following columns where found in your submission:   
+             \n{issue_cols}")
+}
+```
+
+`r if(is_error("err_tmp_invalid-column")){msg_invalid_col}`
+
 ```{r ou, include=FALSE}
 if(is_error("err_org_unknown-ou")){
   msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
