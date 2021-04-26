@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2021-02-04
+## UPDATED:  2021-04-26
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -104,7 +104,7 @@ library(googledrive)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-04-15'
+    pdate <- '2021-04-23'
   
     curr_date <- ymd(Sys.Date())
   
@@ -234,13 +234,13 @@ library(googledrive)
       
   #remove submitter from file name
     df_err <- df_err %>% 
-      mutate(file_name_n = file_name %>% 
+      mutate(file_name = file_name %>% 
                str_remove(".xlsx$") %>% 
                str_replace(" - ", " [") %>% 
                paste0("]"))
 
     df_stat <- df_stat %>% 
-      mutate(file_name_n = file_name %>% 
+      mutate(file_name = file_name %>% 
                str_remove(".xlsx$") %>% 
                str_replace(" - ", " [") %>% 
                paste0("]"))
@@ -272,7 +272,7 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename",
-             processed_date >= "2021-04-15") %>% 
+             processed_date >= "2021-04-23") %>% 
       distinct(file_name) %>% 
       pull()
   
