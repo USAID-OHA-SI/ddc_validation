@@ -114,7 +114,7 @@ library(googledrive)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-04-15'
+    pdate <- '2021-04-23'
   
     curr_date <- ymd(Sys.Date())
   
@@ -125,13 +125,15 @@ library(googledrive)
   # Raw submissions (latest files)
     df_raws <- s3_objects(
         bucket = bkt_name,
-        prefix = "ddc/uat/raw/hfr/incoming",
+        prefix = "ddc/uat/raw/hfr/archive",
         n = Inf,
         unpack_keys = TRUE
       ) 
   
     df_raws <- df_raws %>% 
-      filter(last_modified >= pdate, nchar(sys_data_object) > 1) %>% 
+      filter(last_modified >= pdate, 
+             nchar(sys_data_object) > 1,
+             str_detect(sys_data_object, ".xlsx$")) %>% 
       select(key, filename = sys_data_object, last_modified) %>% 
       arrange(filename) 
 
@@ -275,15 +277,16 @@ library(googledrive)
 
   #identify latest error report
     latest_err_rpt <- s3_objects(
-      bucket = "gov-usaid",
-      prefix = "ddc/uat/processed/hfr/outgoing/Detailed"
-    ) %>%
-      s3_unpack_keys() %>%
+        bucket = bkt_name,
+        prefix = "ddc/uat/processed/hfr/outgoing/Detailed",
+        unpack_keys = TRUE
+      ) %>% 
       filter(
         str_detect(
           str_to_lower(sys_data_object),
           pattern = "^detailed_error_output_.*.csv$")
       ) %>%
+      filter(last_modified == max(last_modified)) %>%
       pull(key) %>%
       sort() %>%
       last()
@@ -293,20 +296,19 @@ library(googledrive)
     
   #download
     s3_download(
-      bucket = "gov-usaid",
+      bucket = bkt_name,
       object = latest_err_rpt,
       filepath = file.path("Data", basename(latest_err_rpt)))
     
     
   #identify latest submission status report
     latest_err_status <- s3_objects(
-      bucket = "gov-usaid",
-      prefix = "ddc/uat/processed/hfr/outgoing/HFR_Submission"
-    ) %>%
-      s3_unpack_keys() %>%
-      arrange(last_modified) %>% 
-      pull(key) %>%
-      last() 
+        bucket = bkt_name,
+        prefix = "ddc/uat/processed/hfr/outgoing/HFR_Submission",
+        unpack_keys = TRUE
+      ) %>% 
+      filter(last_modified == max(last_modified)) %>% 
+      pull(key) 
     
   #print latest
     basename(latest_err_status)
@@ -344,7 +346,7 @@ library(googledrive)
     
   # Check if non-processed files were reported in error outputs
     df_sheets_check %>%
-      filter(is.na(key)) %>% 
+      filter(is.na(key_raw)) %>% 
       distinct(file_name) %>% 
       mutate(file_name = str_remove(file_name, " - .*")) %>% 
       left_join(df_stat, by = "file_name") %>% 
@@ -352,7 +354,7 @@ library(googledrive)
       pull(file_name)
     
     df_sheets_check %>%
-      filter(is.na(key)) %>% 
+      filter(is.na(key_raw)) %>% 
       distinct(file_name) %>% 
       mutate(file_name = str_remove(file_name, " - .*")) %>% 
       left_join(df_err, by = "file_name") %>% 
