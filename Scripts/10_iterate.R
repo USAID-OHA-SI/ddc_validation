@@ -35,86 +35,12 @@ library(googledrive)
 
 # FUNCTIONS
 
-    #' @title Read sheets from S3 Objects / Excel
-    #' 
-    #' @param bucket
-    #' @param object_key
-    #' @param access_key
-    #' @param secret_key
-    #' 
-    s3_excel_sheets <- 
-      function(bucket, object_key,
-               access_key = NULL,
-               secret_key = NULL) {
-        
-        # Notification
-        print(basename(object_key))
-        
-        # Check keys
-        if (is.null(access_key))
-          access_key = glamr::get_s3key("access")
-        
-        if (is.null(secret_key))
-          secret_key = glamr::get_s3key("secret")
-        
-        # Create excel temp file
-        tmpfile <- base::tempfile(fileext = ".xlsx")
-        
-        # Save S3 Object to temp file
-        s3_obj <- aws.s3::save_object(
-          bucket = bucket,
-          object = object_key,
-          file = tmpfile,
-          key = access_key,
-          secret = secret_key
-        )
-        
-        # Read sheets from file
-        sheets <- readxl::excel_sheets(s3_obj)
-        
-        # Clean up 
-        file.remove(tmpfile)
-        
-        return(sheets)
-      }
-    
-    
-    #' @title connect_text
-    #' 
-    #' @param txt       String charactors
-    #' @param connector Charactor used as connector
-    #' 
-    connect_text <- function(txt, 
-                             connections = "[^a-zA-Z0-9]",
-                             connector = "_") {
-      
-      text <- base::sapply(txt, function(x) {
-        x %>% 
-          stringr::str_split(connections) %>% 
-          base::unlist() %>% 
-          stringi::stri_remove_empty() %>% 
-          base::paste0(collapse = connector)
-      }, USE.NAMES = FALSE)
-      
-      return(text)
-    }
-
-    
-    #' @title Create a Temp Directory
-    #' @return Full folder path
-    #'
-    temp_folder <- function() {
-      tmp <- fs::dir_create(fs::file_temp())
-      cat("Missing files saved to", tmp)
-      
-      return(tmp)
-    }
     
 # CONFIRM SUBMISSIONS ------------------------------------------
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-04-23'
+    pdate <- '2021-05-10'
   
     curr_date <- ymd(Sys.Date())
   
@@ -205,71 +131,29 @@ library(googledrive)
       
     # Check meta tabs for unprocessed files
       df_metadata <- raw_files %>% 
-        map_dfr(function(x) {
-          
-          meta_tab <- 'meta'
-          vars <- c("Operating Unit/Country", 
-                    "HFR FY and Period",
-                    "Template version",
-                    "Template type")
-          
-          sheets <- readxl::excel_sheets(path = x)
-          
-          if (meta_tab %in% str_to_lower(sheets)) {
-            df_meta <- readxl::read_excel(path = x, 
-                               sheet = 'meta',
-                               skip = 1,
-                               range = "B2:C5",
-                               col_names = c("var", "value"))
-          } else {
-            df_meta <- tibble(
-              var = vars,
-              value = NA
-            )
-          }
-          
-          df_meta %>% 
-            mutate(filename = basename(x),
-                   var = if_else(var == "Operating Unit", 
-                                 "Operating Unit/Country", 
-                                 var)) %>% 
-            pivot_wider(names_from = var, values_from = value) %>% 
-            janitor::clean_names()
-        }) 
-      
-    # Check extra columns / rows
-      df_structure <- raw_files %>% 
-        map_dfr(function(x) {
-          
-          
-          sheets <- readxl::excel_sheets(path = x)
-          
-          df <- sheets %>% 
-            str_subset("meta", negate = TRUE) %>% 
-            map_dfr(function(y) {
-              
-              readxl::read_excel(path = x, sheet = y, skip = 1, col_types = "text") %>% 
-                mutate(file_name = basename(x), sheet_name = y) %>% 
-                pivot_longer(cols = -ends_with("_name"),
-                             names_to = "variable", 
-                             values_to = "value") 
-                
-              
-            })
-          
-          return(df)
-        }) 
+        map_dfr(hfr_metadata) 
+
       
     # Empty Column
-      df_structure %>% 
-        distinct(file_name, sheet_name, variable) %>% 
-        filter(str_detect(variable, '^\\.')) %>% 
+      df_metadata %>% 
+        filter(is.na(operating_unit_country) | is.na(hfr_fy_and_period)) %>% 
         prinf()
       
     # Empty Rows
-      df_structure %>% 
-        filter(variable == 'date', is.na(value)) %>% 
+      df_metadata %>% 
+        filter(!is.na(operating_unit_country),
+               !is.na(hfr_fy_and_period),
+               rows > 0,
+               rows_empty > 0) %>% 
         prinf()
+      
+    # Empty Columns
+      df_metadata %>% 
+        filter(!is.na(operating_unit_country),
+               !is.na(hfr_fy_and_period),
+               rows > 0,
+               rows_empty > 0) %>% 
+          prinf()
       
       #unlink(tmp, recursive = TRUE)
     
