@@ -132,28 +132,6 @@ library(googledrive)
     # Check meta tabs for unprocessed files
       df_metadata <- raw_files %>% 
         map_dfr(hfr_metadata) 
-
-      
-    # Empty Column
-      df_metadata %>% 
-        filter(is.na(operating_unit_country) | is.na(hfr_fy_and_period)) %>% 
-        prinf()
-      
-    # Empty Rows
-      df_metadata %>% 
-        filter(!is.na(operating_unit_country),
-               !is.na(hfr_fy_and_period),
-               rows > 0,
-               rows_empty > 0) %>% 
-        prinf()
-      
-    # Empty Columns
-      df_metadata %>% 
-        filter(!is.na(operating_unit_country),
-               !is.na(hfr_fy_and_period),
-               rows > 0,
-               rows_empty > 0) %>% 
-          prinf()
       
       #unlink(tmp, recursive = TRUE)
     
