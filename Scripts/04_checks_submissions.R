@@ -16,7 +16,6 @@
   library(knitr)
   library(rmarkdown)
   library(here)
-  library(googledrive)
 
 # VARIABLES --------------------------------------------------------
 
@@ -24,10 +23,10 @@
     bkt_name <- "gov-usaid"
     
   # Date 
-    pdate <- '2021-05-10'
+    pdate <- '2021-05-20'
     
   # Run 2021-05-10
-    dir_raws <- "./Data/ddc-run-2021-05-10"
+    dir_raws <- paste0("./Data/ddc-run-", pdate)
     dir_procs <- file.path(dir_raws, "processed")
     dir_outs <- file.path(dir_raws, "outputs")
   
@@ -141,16 +140,47 @@
   
   #' @title Download DDC/HFR Outputs
   #' 
-  #' @param df
   #' @param output
+  #' @param df_outs
   #' 
-  s3_outputs <- function(df, output = "errors") {
+  #' @return Latest object key
+  #' 
+  s3_latest_outputs <- function(output = "errors", 
+                                df_outs = NULL) {
     
+    # Validate outputs
     outputs <- c("submissions", "mechanisms", "errors", "tableau")
     
+    if (!output %in% outputs) {
+      message(glue("<{output}> is not a valid option. Try one of these: {base::paste(outputs, collapse = ', ')}"))
+      return(NULL)
+    }
     
+    key_pattern <- dplyr::case_when(
+      output == "submissions" ~ "^hfr_submission_status_.*.csv$",
+      output == "mechanisms" ~ "^hfr_mechanism_submission_status_.*.csv$",
+      output == "errors" ~ "^detailed_error_output_.*.csv$",
+      output == "tableau" ~ "^hfr_tableau_.*.csv$"
+    )
     
+    # Outputs objects
+    if (is.null(df_outs)) {
+      df_outs <- glamr::s3_objects(
+          bucket = "gov-usaid",
+          prefix = "ddc/uat/processed/hfr/outgoing/",
+          n = Inf,
+          unpack_keys = TRUE
+        ) %>% 
+        filter(stringr::str_detect(stringr::str_to_lower(sys_data_object), ".csv$"))
+    }
     
+    # Detailed Errors
+    key <- df_outs %>% 
+      filter(stringr::str_detect(stringr::str_to_lower(sys_data_object), pattern = key_pattern)) %>% 
+      filter(last_modified == base::max(last_modified)) %>% 
+      pull(key)
+    
+    return(key)
   }
   
   #' @title Extract Metadata from HFR Submission
@@ -235,10 +265,7 @@
         
         # Count empty rows
         r_empty <- df %>% 
-          #names() %>% 
-          #first() %>% 
           filter(is.na(!!sym(names(df)[1]))) %>% 
-          #filter(df, !!sym(names(.)) %>% 
           nrow()
         
         # Count empty columns
@@ -268,11 +295,10 @@
   
   
 # DATA ----
- 
+  
   # Processed raw files
     df_raws <- s3_objects(
         bucket = bkt_name,
-        #prefix = "ddc/uat/raw/hfr/archive",
         prefix = s3_path("raw", "archive"),
         n = Inf,
         unpack_keys = TRUE
@@ -307,30 +333,19 @@
     
   # Detailed Errors
     key_errors <- df_outs %>% 
-      filter(str_detect(str_to_lower(sys_data_object),
-                        pattern = "^detailed_error_output_.*.csv$")) %>% 
-      filter(last_modified == max(last_modified)) %>% 
-      pull(key)
+      s3_latest_outputs(output = "errors", df_outs = .)
     
   # Submission Status
     key_subms <- df_outs %>% 
-      filter(str_detect(str_to_lower(sys_data_object),
-                        pattern = "^hfr_submission_status_.*.csv$")) %>% 
-      filter(last_modified == max(last_modified)) %>% 
-      pull(key)
+      s3_latest_outputs(output = "submissions", df_outs = .)
+    
   # Mechanism Status
     key_mechs <- df_outs %>% 
-      filter(str_detect(str_to_lower(sys_data_object),
-                        pattern = "^hfr_mechanism_submission_status_.*.csv$")) %>% 
-      filter(last_modified == max(last_modified)) %>% 
-      pull(key)
+      s3_latest_outputs(output = "mechanisms", df_outs = .)
     
   # Tableau Output
     key_tbw <- df_outs %>% 
-      filter(str_detect(str_to_lower(sys_data_object),
-                        pattern = "^hfr_tableau_.*.csv$")) %>% 
-      filter(last_modified == max(last_modified)) %>% 
-      pull(key)
+      s3_latest_outputs(output = "tableau", df_outs = .)
   
     
 # DOWNLOAD ----
@@ -343,13 +358,13 @@
     
   # process files
     df_procs %>% 
-      pull(key_proc) %>% 
+      pull(key) %>% 
       map(~s3_download(bkt_name, .,
                        filepath = file.path(dir_procs, basename(.))))
     
-    
   # outputs (errors)
-    c(key_errors, key_mechs, key_subms) %>% 
+    #c(key_errors, key_mechs, key_subms) %>% 
+    key_subms %>% 
       map(~s3_download(bucket = bkt_name, 
                        object = .,
                        filepath = file.path(dir_outs, basename(.))))
@@ -392,7 +407,7 @@
       prinf()
   
   # Empty Columns
-    df_metadata %>% 
+    meta %>% 
       filter(!is.na(operating_unit_country),
              !is.na(hfr_fy_and_period),
              rows > 0,
@@ -403,15 +418,16 @@
     df_status <- list.files(
         dir_outs, 
         basename(key_subms), 
-        full.names = TRUE) %>%
-      vroom() %>% 
-      filter(processed_date %in% c(pdate, ymd(pdate) + 1))
+        full.names = TRUE
+      ) %>%
+      vroom() 
     
     df_status %>% glimpse()
     
   # Check Submission status for failed files
     df_status %>% 
-      filter(str_detect(status, "Entire file failed")) %>% 
+      filter(str_detect(status, "Entire file failed"),
+             processed_date == pdate) %>% 
       left_join(meta_only, by = c("file_name" = "filename")) %>% 
       select(-c(status:records_not_processed_due_to_errors)) %>% 
       view()
