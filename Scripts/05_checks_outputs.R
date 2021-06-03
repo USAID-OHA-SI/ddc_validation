@@ -6,17 +6,13 @@
 
 # LIBRARIES ----
 
-library(tidyverse)
-library(DBI)
-library(odbc)
-#library(dbplyr)
-#library(RSQLite)
-#library(RMySQL)
-library(glue)
-library(glamr)
-library(janitor)
-library(lubridate)
-
+  library(tidyverse)
+  library(DBI)
+  library(odbc)
+  library(glue)
+  library(glamr)
+  library(janitor)
+  library(lubridate)
 
 # PARAMS ----
 
@@ -251,9 +247,11 @@ library(lubridate)
   #' 
   #' @param connection  DB Connection
   #' @param df_ref      S3 Raw/Receiving objects
+  #' @param bucket      S3 bucket name
   #' @param tables      List of tables to be updated
   #' 
   update_ref_tables <- function(connection, df_ref,
+                                bucket = "gov-usaid",
                                 tables = c("orghierachy", 
                                            "mechanisms",  
                                            "sitelist",   
@@ -272,10 +270,12 @@ library(lubridate)
             filter(str_detect(key, "orghierarchy")) %>% 
             filter(last_modified == max(last_modified)) %>% 
             pull(key) %>% 
-            s3_read_object(s3_bucket, .) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
             as_tibble() %>% 
             mutate_at(vars(ends_with("tude")), as.double) %>% 
-            dplyr::copy_to(connection, ., tbl_orgs, 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_orgs, 
                            temporary = FALSE,
                            overwrite = TRUE)
         },
@@ -293,10 +293,15 @@ library(lubridate)
             filter(str_detect(key, "mechanisms")) %>% 
             filter(last_modified == max(last_modified)) %>% 
             pull(key) %>% 
-            s3_read_object(s3_bucket, .) %>% 
-            dplyr::copy_to(conn, ., tbl_mechs, 
+            s3_read_object(bucket = bucket, object = .) %>% 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_mechs, 
                            temporary = FALSE,
-                           overwrite = TRUE)
+                           overwrite = TRUE,
+                           indexes = list("operatingunit", 
+                                          "fundingagency", 
+                                          "mech_code"))
         },
         error = function(err) {
           report_update_error(err, tbl_mechs)
@@ -312,12 +317,17 @@ library(lubridate)
             filter(str_detect(key, "sitelist")) %>% 
             filter(last_modified == max(last_modified)) %>% 
             pull(key) %>% 
-            s3_read_object(s3_bucket, .) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
             select(orgunituid, type, mech_code, indicator, 
                    expect_reporting, is_original, source) %>% 
-            dplyr::copy_to(conn, ., tbl_sites, 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_sites, 
                            temporary = FALSE,
-                           overwrite = TRUE)
+                           overwrite = TRUE,
+                           indexes = list("orgunituid", 
+                                          "mech_code", 
+                                          "indicator"))
         },
         error = function(err) {
           report_update_error(err, tbl_sites)
@@ -326,27 +336,116 @@ library(lubridate)
     }  
     
     ## targets
-    if (tbl_sites %in% tables) {
+    if (tbl_targets %in% tables) {
       tryCatch(
         {
           df_ref %>% 
             filter(str_detect(key, "targets")) %>% 
             filter(last_modified == max(last_modified)) %>% 
             pull(key) %>% 
-            s3_read_object(s3_bucket, .) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
             select(fy, psnuuid, mech_code, 
                    indicator, sex, agecoarse, 
                    mer_targets) %>% 
             mutate(mer_results = NA_integer_) %>% 
             dplyr::copy_to(conn, ., tbl_targets, 
                            temporary = FALSE,
-                           overwrite = TRUE)
+                           overwrite = TRUE,
+                           indexes = list("psnuuid", 
+                                          "mech_code", 
+                                          "indicator", 
+                                          "sex", 
+                                          "agecoarse"))
         },
         error = function(err) {
-          report_update_error(err, tbl_sites)
+          report_update_error(err, tbl_targets)
         }
       )
     }  
+  }
+  
+  
+  #' @title Update HFR Error Tables
+  #' 
+  #' @param connection  DB Connection
+  #' @param df_out      S3 Processed/Outgoing objects
+  #' @param tables      List of tables to be updated
+  #' 
+  update_error_tables <- function(connection, df_out,
+                                  bucket = "gov-usaid",
+                                  tables = c("subms_status", 
+                                             "mechs_status",  
+                                             "subms_errors")) {
+    # Tables
+    tbl_subms_status <- "subms_status"
+    tbl_mechs_status <- "mechs_status"
+    tbl_subms_errors <- "subms_errors"
+    
+    ## Submission Status
+    if (tbl_subms_status %in% tables) {
+      tryCatch(
+        {
+          df_out %>% 
+            filter(str_detect(str_to_lower(sys_data_object), 
+                              "hfr_submission_status")) %>% 
+            filter(last_modified == max(last_modified)) %>% 
+            pull(key) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_subms_status, 
+                           temporary = FALSE,
+                           overwrite = TRUE)
+        },
+        error = function(err) {
+          report_update_error(err, tbl_subms_status)
+        }
+      )
+    }
+    
+    # Submissions Mech Status
+    if (tbl_mechs_status %in% tables) {
+      tryCatch(
+        {
+          df_out %>% 
+            filter(str_detect(str_to_lower(sys_data_object), 
+                              "mechanism_detail")) %>% 
+            filter(last_modified == max(last_modified)) %>% 
+            pull(key) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_mechs_status, 
+                           temporary = FALSE,
+                           overwrite = TRUE)
+        },
+        error = function(err) {
+          report_update_error(err, tbl_mechs_status)
+        }
+      )
+    }
+    
+    # Submission detailed errors
+    if (tbl_subms_errors %in% tables) {
+      tryCatch(
+        {
+          df_out %>% 
+            filter(str_detect(str_to_lower(sys_data_object), 
+                              "detailed_error")) %>% 
+            filter(last_modified == max(last_modified)) %>% 
+            pull(key) %>% 
+            s3_read_object(bucket = bucket, object = .) %>% 
+            dplyr::copy_to(dest = connection, 
+                           df = ., 
+                           name = tbl_subms_errors, 
+                           temporary = FALSE, 
+                           overwrite = TRUE)
+        },
+        error = function(err) {
+          report_update_error(err, tbl_subms_errors)
+        }
+      )
+    }
   }
 
 # SETUP ----
@@ -366,15 +465,12 @@ library(lubridate)
   
   
   ## SQLite Connection
+  # conn <- DBI::dbConnect(drv = RSQLite::SQLite(), 
+  #                        dbname = "../../DATABASES/SQLite/hfrrr.sqlite")
   conn <- DBI::dbConnect(drv = RSQLite::SQLite(), 
                          dbname = get_key("sqlite", "db_hfr"))
   
-  ## SQLite Connection with dbplyr
-  # conn <- DBI::dbConnect(drv = RSQLite::SQLite(), 
-  #                        dbname = "../../DATABASES/SQLite/hfrrr.sqlite")
-  
   conn
-  
   conn %>% summary()
   
   ## Disconnect
@@ -388,23 +484,27 @@ library(lubridate)
   #DBI::dbWriteTable(conn, "iris", iris)
   
   # List db tables
-  
   conn %>% DBI::dbListObjects()
   
   conn %>% DBI::dbListTables() 
   #conn %>% dplyr::db_list_tables()
   
+  # Make sure table exists
   conn %>% DBI::dbExistsTable('mtcars')
+  conn %>% DBI::dbExistsTable('iris')
   #conn %>% dplyr::db_has_table('mtcars')
   
+  # List out table columns
   conn %>% DBI::dbListFields('mtcars')
   conn %>% dplyr::tbl('mtcars') %>% colnames()
   
+  # Show SQL Query
   conn %>% dplyr::tbl('mtcars') %>% show_query()
   
   conn %>% 
     dplyr::tbl('mtcars') %>% 
-    filter(cyl > 4) %>% show_query()
+    filter(cyl > 4) %>% 
+    show_query()
   
   conn %>% 
     dplyr::tbl('mtcars') %>% 
@@ -435,14 +535,16 @@ library(lubridate)
   
   tbls_input <- c(tbl_orgs, tbl_mechs, tbl_sites, tbl_targets)
   
-  # TBL Outputs
+  # TBL Error Outputs
   tbl_subms_status <- "subms_status"
   tbl_mechs_status <- "mechs_status"
   tbl_subms_errors <- "subms_errors"
-  tbl_hfr_data <- "hfr_data"
   
-  tbls_output <- c(tbl_subms_status, tbl_mechs_status, 
-                   tbl_subms_errors, tbl_hfr_data)
+  tbls_errors <- c(tbl_subms_status, tbl_mechs_status, tbl_subms_errors)
+  
+  # TBL Tbw output
+  tbl_hfr_outputs <- "hfr_data"
+  
   
   # Check existing tables
   conn %>% 
@@ -460,20 +562,10 @@ library(lubridate)
   # Update input tables [solve transactions issues]
   update_ref_tables(connection = conn,
                     df_ref = df_ref,
+                    bucket = s3_bucket,
                     tables = tbls_input)
   
   ## Orgs
-  df_ref %>% 
-    filter(str_detect(key, "orghierarchy")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    as_tibble() %>% 
-    mutate_at(vars(ends_with("tude")), as.double) %>% 
-    dplyr::copy_to(conn, ., tbl_orgs, 
-                   temporary = FALSE,
-                   overwrite = TRUE)
-  
   tbl(conn, tbl_orgs) %>% glimpse()
   
   tbl(conn, tbl_orgs) %>% 
@@ -483,51 +575,12 @@ library(lubridate)
     prinf()
   
   ## mechs
-  df_ref %>% 
-    filter(str_detect(key, "mechanisms")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    dplyr::copy_to(dest = conn, 
-                   df = ., 
-                   name = tbl_mechs, 
-                   temporary = FALSE,
-                   overwrite = TRUE,
-                   indexes = list("operatingunit", "fundingagency", "mech_code"))
-  
   tbl(conn, tbl_mechs) %>% glimpse()
   
   ## sites
-  df_ref %>% 
-    filter(str_detect(key, "sitelist")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    select(orgunituid, type, mech_code, indicator, 
-           expect_reporting, is_original, source) %>% 
-    dplyr::copy_to(conn, ., tbl_sites, 
-                   temporary = FALSE,
-                   overwrite = TRUE,
-                   indexes = list("orgunituid", "mech_code", "indicator"))
-  
   tbl(conn, tbl_sites) %>% glimpse()
   
   ## targets
-  df_ref %>% 
-    filter(str_detect(key, "targets")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    select(fy, psnuuid, mech_code, 
-           indicator, sex, agecoarse, 
-           mer_targets) %>% 
-    mutate(across(starts_with("mer_"), as.integer)) %>% 
-    dplyr::copy_to(conn, ., tbl_targets, 
-                   temporary = FALSE,
-                   overwrite = TRUE,
-                   indexes = list("psnuuid", "mech_code", 
-                                  "indicator", "sex", "agecoarse"))
-  
   tbl(conn, tbl_targets) %>% glimpse()
   
   
@@ -539,41 +592,22 @@ library(lubridate)
     unpack_keys = TRUE
   )
   
-  ## Submissions status
-  df_out %>% 
-    filter(str_detect(str_to_lower(sys_data_object), "hfr_submission_status")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    dplyr::copy_to(conn, ., tbl_subms_status, temporary = FALSE)
+  # Update error output tables 
+  update_error_tables(connection = conn,
+                      df_out = df_out,
+                      bucket = s3_bucket,
+                      tables = tbls_errors)
   
-  tbl(conn, tbl_subms_status) %>% 
-    glimpse()
+  ## Submissions status
+  tbl(conn, tbl_subms_status) %>% glimpse()
   
   ## Mechanism details
-  df_out %>% 
-    filter(str_detect(str_to_lower(sys_data_object), "mechanism_detail")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    dplyr::copy_to(conn, ., tbl_mechs_status, temporary = FALSE)
-  
-  tbl(conn, tbl_mechs_status) %>% 
-    glimpse()
+  tbl(conn, tbl_mechs_status) %>% glimpse()
   
   ## Submissions Detailed Errors
-  df_out %>% 
-    filter(str_detect(str_to_lower(sys_data_object), "detailed_error")) %>% 
-    filter(last_modified == max(last_modified)) %>% 
-    pull(key) %>% 
-    s3_read_object(s3_bucket, .) %>% 
-    dplyr::copy_to(conn, ., tbl_subms_errors, 
-                   temporary = FALSE, 
-                   overwrite = TRUE)
-  
   tbl(conn, tbl_subms_errors) %>% glimpse()
   
-  ## Output
+  ## HFR Outputs
   df_out %>% 
     filter(str_detect(str_to_lower(sys_data_object), "tableau_output")) %>% 
     filter(last_modified == max(last_modified)) %>% 
@@ -581,11 +615,11 @@ library(lubridate)
     s3_read_object(s3_bucket, .) %>% 
     select(fy, date, hfr_pd, orgunituid, mech_code, 
            indicator, agecoarse, sex, otherdisaggregate, value = val) %>% 
-    dplyr::copy_to(conn, ., tbl_hfr_data, 
+    dplyr::copy_to(conn, ., tbl_hfr_outputs, 
                    temporary = FALSE, 
                    overwrite = TRUE,
                    indexes = list("hfr_pd", "orgunituid", "mech_code", 
                                   "indicator", "agecoarse", "sex"))
   
-  tbl(conn, tbl_hfr_data) %>% glimpse()
+  tbl(conn, tbl_hfr_outputs) %>% glimpse()
 
