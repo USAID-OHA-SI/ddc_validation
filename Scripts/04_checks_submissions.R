@@ -23,7 +23,7 @@
     bkt_name <- "gov-usaid"
     
   # Date 
-    pdate <- '2021-05-20'
+    pdate <- '2021-05-28'
     
   # Run 2021-05-10
     dir_raws <- paste0("./Data/ddc-run-", pdate)
@@ -316,9 +316,7 @@
         n = Inf,
         unpack_keys = TRUE
       ) %>% 
-      filter(str_detect(str_to_lower(sys_data_object), ".csv$"),
-             !str_detect(str_to_lower(sys_data_object), 
-                         "^hfr_lambda_checks_.*._lambda.csv$")) %>% 
+      filter(str_detect(str_to_lower(sys_data_object), ".csv$")) %>% 
       mutate(last_modified = ymd(as.Date(last_modified))) %>% 
       filter(last_modified == max(last_modified))
     

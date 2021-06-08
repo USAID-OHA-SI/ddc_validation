@@ -3,20 +3,31 @@
 ## PURPOSE: Quick look at the outputs
 ## LICENSE: MIT
 ## DATE:    2020-06-02
+## UPDATE:  2020-06-07
 
 # LIBRARIES ----
 
   library(tidyverse)
   library(DBI)
-  library(odbc)
   library(glue)
   library(glamr)
   library(janitor)
   library(lubridate)
+  library(Wavelength)
 
 # PARAMS ----
 
+  # S3 bucket
   s3_bucket <- "gov-usaid"
+  
+  # Date - latest run
+  pdate <- '2021-05-28'
+  
+  # Run 2021-05-10
+  dir_raws <- paste0("./Data/ddc-run-", pdate)
+  dir_procs <- file.path(dir_raws, "processed")
+  dir_outs <- file.path(dir_raws, "outputs")
+  
   
   db_host <- NULL
   db_port <- NULL
@@ -448,10 +459,151 @@
     }
   }
 
+  #' @title Check DDC Ouputs
+  #' 
+  #' @param response format of checks, options: checks, summary
+  #' 
+  check_outputs <- 
+    function(filename, countryname, template_type, 
+             fy, hfr_pd, sheet_name, proc_filename,
+             response = "summary"){
+  
+    
+    # Extra columns from processed files
+    meta_cols <- c("sbmsn_id", "Row_number", "File_name")
+    
+    # Read raw data
+    
+    print(paste0(filename, " - ", sheet_name))
+    
+    df_raw <- readxl::read_excel(path = file.path(dir_raws, filename),
+                                 sheet = sheet_name,
+                                 skip = 1, 
+                                 col_types = "text") %>% 
+      select(-starts_with("..")) %>% 
+      janitor::remove_empty(which = "rows", quiet = TRUE) %>% 
+      janitor::remove_empty(which = "cols", quiet = TRUE)
+    
+    raw_cols <- names(df_raw)
+    raw_ncols <- ncol(df_raw)
+    raw_nrows <- nrow(df_raw)
+    
+    # Read proc data
+    
+    print(proc_filename)
+    
+    df_proc <- readr::read_csv(file = file.path(dir_procs, proc_filename),
+                               skip = 1,
+                               col_types = cols(.default = "c")) 
+    
+    # remove DDC Processing Info
+    df_proc <- df_proc %>% 
+      select(-last_col()) %>% # Note: this is a dynamic column (filename + checks)
+      select(-meta_cols) 
+    
+    proc_cols <- names(df_proc)
+    proc_ncols <- ncol(df_proc)
+    proc_nrows <- nrow(df_proc)
+    
+    # Reshape tables
+    if (template_type != "Long") {
+      df_raw <- df_raw %>% Wavelength::hfr_gather()
+      df_proc <- df_proc %>% Wavelength::hfr_gather()
+    }
+    
+    # Raw dataset
+    df_raw_sum <- df_raw %>% 
+      Wavelength::hfr_fix_date() %>% 
+      mutate(val = as.integer(val)) %>% 
+      group_by(date, indicator) %>% 
+      summarise(across(val, sum, na.rm = TRUE)) %>% 
+      ungroup() %>% 
+      mutate(type = "raw")
+    
+    # processed dataset
+    df_proc_sum <- df_proc %>% 
+      Wavelength::hfr_fix_date() %>% 
+      mutate(val = as.integer(val)) %>% 
+      group_by(date, indicator) %>% 
+      summarise(across(val, sum, na.rm = TRUE)) %>% 
+      ungroup() %>% 
+      mutate(type = "processed")
+    
+    # output dataset
+    sql_output <- glue("SELECT r.*, o.operatingunit, 
+                         o.countryname, o.snu1, 
+                         o.psnu, o.psnuuid
+                         FROM {tbl_hfr_outputs} r
+                         LEFT JOIN {tbl_orgs} o
+                         ON r.orgunituid = o.orgunituid
+                         WHERE countryname = '{countryname}'
+                         AND fy = '{fy}' 
+                         AND hfr_pd = '{hfr_pd}'")
+    
+    df_outputs <- tbl(conn, sql(sql_output)) %>%
+      rename(val = value) %>%
+      collect()
+    
+    #print(df_outputs %>% glimpse())
+    
+    df_out_sum <- df_outputs %>% 
+      mutate(date = as.Date(date), 
+             val = as.integer(val)) %>%
+      group_by(date, indicator) %>% 
+      summarise(across(val, sum, na.rm = TRUE)) %>% 
+      ungroup() %>% 
+      mutate(type = "output")
+    
+    match_proc_data <- all_equal(df_raw_sum, df_proc_sum)
+    match_out_data <- all_equal(df_raw_sum, df_out_sum)
+    
+    # Checks
+    
+    if (response == "checks") {
+      res <- tibble(
+        raw_filename = filename,
+        sheet_name = sheet_name,
+        proc_filename = proc_filename,
+        raw_nrows = raw_nrows,
+        proc_nrows = proc_nrows,
+        match_nrows = raw_nrows == proc_nrows,
+        raw_ncols = raw_ncols,
+        proc_ncols = proc_ncols,
+        match_ncols = raw_ncols == proc_ncols,
+        match_cols = identical(raw_cols, proc_cols),
+        match_proc_data = match_proc_data,
+        match_out_data = match_out_data
+      )
+      
+      return(res)
+    }
+    
+    
+    # Summary
+    
+    if (response == "summary") {
+      
+      res <- df_raw_sum %>% 
+        bind_rows(df_proc_sum) %>% 
+        bind_rows(df_out_sum) %>% 
+        pivot_wider(names_from = "indicator", values_from = "val") %>% 
+        mutate(raw_filename = filename,
+               proc_filename = proc_filename,
+               sheet_name = sheet_name) %>% 
+        relocate(raw_filename, proc_filename, sheet_name, .before = 1)
+      
+      return(res)
+    }
+    
+    # other - all dfs
+    return(c(df_raw, df_proc, df_out))
+  }
+  
 # SETUP ----
 
+  # Set new services
   #set_service(service = "mysql", user = "host", pwd = "localhost")
-
+  #set_service(service = "sqlite", user = "db_hfr", pwd = "../../<path-to-your-dbs>/<db-filename>.db")
 
 # CONNECTIONS ----
 
@@ -492,7 +644,6 @@
   # Make sure table exists
   conn %>% DBI::dbExistsTable('mtcars')
   conn %>% DBI::dbExistsTable('iris')
-  #conn %>% dplyr::db_has_table('mtcars')
   
   # List out table columns
   conn %>% DBI::dbListFields('mtcars')
@@ -512,7 +663,9 @@
     arrange(desc(cyl), name) %>% 
     show_query() 
   
-  conn %>% dplyr::tbl('mtcars') %>% explain()
+  conn %>% 
+    dplyr::tbl('mtcars') %>% 
+    explain()
   
   conn %>% 
     tbl('mtcars') %>% 
@@ -544,7 +697,6 @@
   
   # TBL Tbw output
   tbl_hfr_outputs <- "hfr_data"
-  
   
   # Check existing tables
   conn %>% 
@@ -623,3 +775,144 @@
   
   tbl(conn, tbl_hfr_outputs) %>% glimpse()
 
+# Validations ----
+  
+  # List of valid countries
+  tbl(conn, tbl_orgs) %>% glimpse()
+  
+  countries <- tbl(conn, tbl_orgs) %>%
+    filter(operatingunit != 6) %>% 
+    distinct(operatingunit, countryname) %>% 
+    collect() 
+  
+  # latest submission status
+  tbl(conn, tbl_subms_status) %>% glimpse()
+  
+  tbl(conn, tbl_subms_status) %>% 
+    collect() %>% 
+    filter(str_detect(status, "errors")) %>% # Not available in SQL
+    view()
+  
+  # Number of files by run
+  tbl(conn, tbl_subms_status) %>% 
+    distinct(processed_date, file_name) %>% 
+    count(processed_date) %>% 
+    arrange(desc(processed_date)) %>% 
+    collect() %>% 
+    prinf()
+  
+  # Subms status for latest run
+  df_subms_status = tbl(conn, tbl_subms_status) %>% 
+    filter(processed_date == max(processed_date)) %>% 
+    collect() 
+  
+  # Metadata from latest subm files
+  df_meta <- dir_raws %>% 
+    list.files(pattern = ".xlsx$", full.names = TRUE) %>% 
+    as_vector() %>% 
+    map_dfr(hfr_metadata) 
+  
+  df_meta <- df_meta %>% 
+    mutate(countryname = if_else(str_detect(operating_unit_country, "\\/"),
+                                  str_extract(operating_unit_country, "(?<=\\/).*"),
+                                  operating_unit_country),
+           fy = if_else(!is.na(hfr_fy_and_period),
+                   paste0("20", str_sub(hfr_fy_and_period, 3, 4)),
+                   hfr_fy_and_period),
+           hfr_pd = if_else(!is.na(hfr_fy_and_period),
+                            str_sub(hfr_fy_and_period, 6, 8),
+                            hfr_fy_and_period),
+           hfr_pd = match(hfr_pd, month.abb) + 3,
+           hfr_pd = if_else(hfr_pd > 12, hfr_pd - 12, hfr_pd),
+           hfr_pd = str_pad(hfr_pd, width = 2, side = "left", pad = "0")
+    ) %>% 
+    relocate(countryname, .after = operating_unit_country) %>% 
+    relocate(fy, hfr_pd, .after = hfr_fy_and_period) 
+  
+  # Cross Check metadata against subms statuses
+  df_meta_checks <- df_subms_status %>% 
+    left_join(df_meta, by = c("file_name" = "filename")) %>% 
+    rename(filename = file_name) %>% 
+    relocate(filename, .before = 1) %>% 
+    mutate(
+      cntry_check = countryname.x == countryname.y,
+      cntry_match1 = countryname.x %in% countries$countryname,
+      cntry_match2 = countryname.y %in% countries$countryname,
+      fy_check = fy.x == fy.y,
+      hfr_pd_check = hfr_pd.x == hfr_pd.y
+    ) 
+
+  # Double check metadata for these?
+  df_meta_checks %>% 
+    filter(
+      cntry_check == FALSE |
+      cntry_match1 == FALSE |
+      cntry_match2 == FALSE |
+      fy_check == FALSE |
+      hfr_pd_check == FALSE
+    ) %>% 
+    select(filename, countryname.x, countryname.y, 
+           ends_with("_match1"), # Countryname from Subm Status
+           ends_with("_match2"), # Countryname from Metadata
+           ends_with("_check")) %>% view()
+  
+  # Extract metadata from processed files
+  df_proc_files <- dir_procs %>% 
+    list.files(pattern = ".csv$", full.names = TRUE) %>% 
+    map(basename) %>% 
+    as_vector() %>% 
+    as_tibble() %>% 
+    rename(proc_filename = value) %>% 
+    filter(
+      str_detect(proc_filename, 
+                 pattern = "^hfr_lambda_checks_.*", 
+                 negate = TRUE),
+      str_detect(proc_filename, 
+                 pattern = ".*_meta.csv$", 
+                 negate = TRUE)
+    ) %>% 
+    mutate(
+      raw_filename = str_replace(proc_filename, "(?<=\\d{8}\\s\\d{6}).*", ".xlsx"),
+      meta = str_extract(proc_filename, "(?<=\\d{8}\\s\\d{6}_).*(?=.csv)"),
+      sheet_name = str_extract(proc_filename, "(?<=\\d{8}\\s\\d{6}_).*(?=_Wide.csv|_Long.csv|_Limited.csv)"),
+      template_type = str_extract(proc_filename, "(?<=_)[^_]+(?=.csv)"),
+      template_type = if_else(template_type == "Limited", 
+                              "Wide - Limited", template_type)
+    ) %>% 
+    relocate(raw_filename, .before = 1)
+  
+  # Check proc files metadata against info in meta worksheet
+  df_proc_checks <- df_meta %>% 
+    rename(sheet_name = sheet) %>% 
+    right_join(df_proc_files, 
+               by = c("filename" = "raw_filename",
+                      "template_type" = "template_type",
+                      "sheet_name" = 'sheet_name')) 
+  
+  df_proc_checks %>% filter(is.na(meta))
+  
+  # Track data accross raw, processed and output files
+  ddc_checks <- df_proc_checks %>% 
+    filter(!is.na(meta)) %>% 
+    #filter(filename == 'HFR_FY21_Apr_Zimbabwe_20210517 - Brilliant Nkomo 20210526 032430.xlsx') %>% 
+    select(filename, countryname, template_type, 
+           fy, hfr_pd, sheet_name, proc_filename) %>% 
+    pmap_dfr(check_outputs, response = "checks")
+  
+  ddc_checks
+  
+  ddc_summary <- df_proc_checks %>% 
+    filter(!is.na(meta)) %>% 
+    #filter(filename == 'HFR_FY21_Apr_Zimbabwe_20210517 - Brilliant Nkomo 20210526 032430.xlsx') %>% 
+    select(filename, countryname, template_type, 
+           fy, hfr_pd, sheet_name, proc_filename) %>% 
+    pmap_dfr(check_outputs, response = "summary")
+  
+  ddc_summary
+  
+
+  
+  
+    
+  
+  
