@@ -19,6 +19,7 @@ library(knitr)
 library(rmarkdown)
 library(here)
 library(googledrive)
+library(fs)
 
 
 # GLOBAL VARIABLES --------------------------------------------------------
@@ -40,7 +41,7 @@ library(googledrive)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-05-10'
+    pdate <- '2021-06-15'
   
     curr_date <- ymd(Sys.Date())
   
@@ -120,7 +121,8 @@ library(googledrive)
         distinct(key_raw) %>% 
         pull(key_raw) 
       
-      tmp <- temp_folder()
+      tmp <- dir_create(file_temp())
+      cat("downloaded files saved to", tmp)
       
       fkeys %>% 
         map(~s3_download(bucket = bkt_name,
@@ -233,7 +235,7 @@ library(googledrive)
   #pull distinct files with errors from the error report to iterate over
     filename <- df_err %>%
       filter(validation_type != "wrn_tmp_invalid-filename",
-             processed_date >= "2021-04-23") %>% 
+             processed_date >= pdate) %>% 
       distinct(file_name) %>% 
       pull()
   
