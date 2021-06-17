@@ -288,6 +288,25 @@ if(is_error("err_pd_multiple-periods")){
 `r if(is_error("err_pd_multiple-periods")){msg_multi}`
 
 
+```{r nonnumeric_val, include=FALSE}
+
+if(is_error("err_val_non-numeric-value")){
+  
+  issue_nonnumeric <- df_err_sbmsn %>%
+    filter(validation_type == "err_val_non-numeric-value",
+           !is.na(additional_information)) %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_issue_nonnumeric <- glue("**NON-NUMERIC ERROR**:
+                       The submission contains {count_error('err_val_non-numeric-value')} of non-numeric result values in column L of your long format submission or column H onwards of a wide format submission. Review the submission to determine what is being entered and resubmit to have the data included for this period.
+                       \n{issue_nonnumeric}")
+}
+```
+
+`r if(is_error("err_val_non-numeric-value")){msg_issue_nonnumeric}`
+
 ```{r neg_val, include=FALSE}
 
 if(is_error("err_val_negative-value")){
@@ -365,25 +384,6 @@ if(is_error("wrn_tmp_dropped-tabs")){
 ```
 
 `r if(is_error("wrn_pd_out-of-bounds-date")){pd_meta_missing}`
-
-```{r nonnumeric_val, include=FALSE}
-
-if(is_error("wrn_val_non-numeric-value")){
-  
-  issue_nonnumeric <- df_err_sbmsn %>%
-    filter(validation_type == "wrn_val_non-numeric-value",
-           !is.na(additional_information)) %>% 
-    distinct(additional_information) %>% 
-    pull() %>% 
-    paste0(collapse = ", ")
-  
-  msg_issue_nonnumeric <- glue("**NON-NUMERIC WARNING**:
-                       The submission contains {count_error('wrn_val_non-numeric-value')} of non-numeric result values in column L of your long format submission or column H onwards of a wide format submission. Review the submission to determine what is being entered so as to not continue with non-numeric values in future submissions.
-                       \n{issue_nonnumeric}")
-}
-```
-
-`r if(is_error("wrn_val_non-numeric-value")){msg_issue_nonnumeric}`
 
 ```{r missing_ind, include=FALSE}
 
