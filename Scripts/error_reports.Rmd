@@ -418,6 +418,16 @@ if(is_error("wrn_tmp_dropped-tabs")){
 
 `r if(is_error("wrn_tmp_dropped-tabs")){msg_droppedtabs}`
 
+```{r adj_structure, include=FALSE}
+
+if(is_error("wrn_tmp_invalid-template")){
+  msg_invalidtemplate <- glue("**ADJUSTED TEMPLATE STRUCTURE WARNING:
+                              Some adjustments were made to the submission template where columns were either added or removed. Please ensure that you are using one of the existing templates to submit the file. Templates are available here (tinyurl.com/oha-hfr)")
+}
+```
+
+`r if(is_error("wrn_tmp_invalid-template")){msg_invalidtemplate}`
+
 ```{r invalid_filename, include=FALSE}
 
   msg_invalidfilename <- glue("**INVALID FILE NAME WARNING**:
