@@ -131,6 +131,21 @@ if(is_error("err_tmp_invalid-column")){
 
 `r if(is_error("err_tmp_invalid-column")){msg_invalid_col}`
 
+```{r blank_tab}
+if(is_error("err_tmp_no-data")){
+  issue_blank <- df_err_sbmsn %>%
+    filter(validation_type == "err_tmp_no-data") %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_blank_tab <- glue("TAB WITH NO DATA ERROR:
+                        A tab labeled HFR did not include any data to process, and therefore was not processed. If this is a mistake, please add the data to the tab in the submission and resubmit. The follow tab(s) had no data included: {issue_blank}")
+}
+```
+
+`r if(is_error("err_tmp_no-data")){msg_blank_tab}`
+
 ```{r ou, include=FALSE}
 if(is_error("err_org_unknown-ou")){
   msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
