@@ -131,6 +131,21 @@ if(is_error("err_tmp_invalid-column")){
 
 `r if(is_error("err_tmp_invalid-column")){msg_invalid_col}`
 
+```{r blank_tab}
+if(is_error("err_tmp_no-data")){
+  issue_blank <- df_err_sbmsn %>%
+    filter(validation_type == "err_tmp_no-data") %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_blank_tab <- glue("TAB WITH NO DATA ERROR:
+                        A tab labeled HFR did not include any data to process, and therefore was not processed. If this is a mistake, please add the data to the tab in the submission and resubmit. The follow tab(s) had no data included: {issue_blank}")
+}
+```
+
+`r if(is_error("err_tmp_no-data")){msg_blank_tab}`
+
 ```{r ou, include=FALSE}
 if(is_error("err_org_unknown-ou")){
   msg_ou <- glue("**OPERATING UNIT NAME ERROR**:
@@ -287,6 +302,63 @@ if(is_error("err_pd_multiple-periods")){
 
 `r if(is_error("err_pd_multiple-periods")){msg_multi}`
 
+```{r future_date, include = FALSE}
+
+if(is_error("err_pd_future-date")){
+  future_dates <- df_err_sbmsn %>% 
+    filter(validation_type == "err_pd_future-date") %>% 
+    distinct(additional_information)%>% 
+    arrange(additional_information) %>% 
+    mutate(additional_information = str_remove(additional_information, "Date: ")) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+
+  msg_future_date <- glue("**FUTURE DATE ERROR**:
+                          Your submission had {count_error('err_pd_future-date')} rows with a date in the future, ahead of what is included in the meta tab. The date entered here does not fall within the periods available for submission. Please review the issues in the submission and resubmit with a correct dates within the period.The dates outside this period included: 
+  \n{future_dates}")
+  }
+
+```
+
+`r if(is_error("err_pd_future-date")){msg_future_date}`
+
+```{r agg_mismatch, include=FALSE}
+
+if(is_error("err_val_aggregation-mismatch")){
+  agg_mismatch <- df_err_sbmsn %>%
+    filter(validation_type == "err_val_aggregation-mismatch") %>% 
+    distinct(orgunit, orgunituid, additional_information) %>% 
+    mutate(info = glue("Site: {orgunit} ({orgunituid}), {additional_information}")) %>% 
+    pull() %>% 
+    paste0(collapse = " \n")
+  
+  msg_agg_mismatch <- glue("**AGGREGATION MISMATCH ERROR**:
+                           The submission include both weekly and aggregated monthly data that were not equal. Any values that have both monthly and weekly submission but do not match will not be accepted in the database. These must be resolved or the data will not be included in the HFR database. Please update either the week or month results and resubmit in the following instances
+                           \n{agg_mismatch}")
+    
+}
+```
+
+`r if(is_error("err_val_aggregation-mismatch")){msg_agg_mismatch}`
+
+```{r nonnumeric_val, include=FALSE}
+
+if(is_error("err_val_non-numeric-value")){
+  
+  issue_nonnumeric <- df_err_sbmsn %>%
+    filter(validation_type == "err_val_non-numeric-value",
+           !is.na(additional_information)) %>% 
+    distinct(additional_information) %>% 
+    pull() %>% 
+    paste0(collapse = ", ")
+  
+  msg_issue_nonnumeric <- glue("**NON-NUMERIC ERROR**:
+                       The submission contains {count_error('err_val_non-numeric-value')} of non-numeric result values in column L of your long format submission or column H onwards of a wide format submission. Review the submission to determine what is being entered and resubmit to have the data included for this period.
+                       \n{issue_nonnumeric}")
+}
+```
+
+`r if(is_error("err_val_non-numeric-value")){msg_issue_nonnumeric}`
 
 ```{r neg_val, include=FALSE}
 
@@ -346,35 +418,35 @@ if(is_error("wrn_tmp_dropped-tabs")){
 
 `r if(is_error("wrn_tmp_dropped-tabs")){msg_droppedtabs}`
 
+```{r adj_structure, include=FALSE}
+
+if(is_error("wrn_tmp_invalid-template")){
+  msg_invalidtemplate <- glue("**ADJUSTED TEMPLATE STRUCTURE WARNING:
+                              Some adjustments were made to the submission template where columns were either added or removed. Please ensure that you are using one of the existing templates to submit the file. Templates are available here (tinyurl.com/oha-hfr)")
+}
+```
+
+`r if(is_error("wrn_tmp_invalid-template")){msg_invalidtemplate}`
+
 ```{r invalid_filename, include=FALSE}
 
   msg_invalidfilename <- glue("**INVALID FILE NAME WARNING**:
                     The file does not match the naming convention specified in the guidance. In most cases this is a result of using the month instead of the period number. For you submission next period, please revise to meet the naming convetion: HFR\\_FY[YY]\\_[Period]\\_[OU or Country Name]\\_[PARTNER - if applicable]\\_[DATE SUBMITTED as YYYYMMDD]
   \n{file}")
 
-#`r if(is_error("wrn_tmp_invalid-filename")){msg_invalidfilename}`
 ```
 
+`r if(is_error("wrn_tmp_invalid-filename")){msg_invalidfilename}`
+
+```{r pd_meta_missing, include=FALSE}
+
+  pd_meta_missing <- glue('**OUT OF BOUNDS DATE WARNING**:
+                   Your file was flagged with an out of bounds date as a result of leaving the period in the meta tab blank. All records have been retained since all dates in the file are for the same period. However, the meta tab has the period missing from the dropdown in cell in C4. For future submissions, please include and update the period on the meta tab each time.')
 
 
-```{r nonnumeric_val, include=FALSE}
-
-if(is_error("wrn_val_non-numeric-value")){
-  
-  issue_nonnumeric <- df_err_sbmsn %>%
-    filter(validation_type == "wrn_val_non-numeric-value",
-           !is.na(additional_information)) %>% 
-    distinct(additional_information) %>% 
-    pull() %>% 
-    paste0(collapse = ", ")
-  
-  msg_issue_nonnumeric <- glue("**NON-NUMERIC WARNING**:
-                       The submission contains {count_error('wrn_val_non-numeric-value')} of non-numeric result values in column L of your long format submission or column H onwards of a wide format submission. Review the submission to determine what is being entered so as to not continue with non-numeric values in future submissions.
-                       \n{issue_nonnumeric}")
-}
 ```
 
-`r if(is_error("wrn_val_non-numeric-value")){msg_issue_nonnumeric}`
+`r if(is_error("wrn_pd_out-of-bounds-date")){pd_meta_missing}`
 
 ```{r missing_ind, include=FALSE}
 
