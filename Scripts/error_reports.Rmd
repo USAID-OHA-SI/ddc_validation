@@ -287,7 +287,28 @@ if(is_error("err_pd_multiple-periods")){
 
 `r if(is_error("err_pd_multiple-periods")){msg_multi}`
 
+```{r future_date, include = FALSE}
+
+if(is_error("err_pd_future-date")){
+  future_dates <- df_err_sbmsn %>% 
+    filter(validation_type == "err_pd_future-date") %>% 
+    distinct(additional_information)%>% 
+    arrange(additional_information) %>% 
+    mutate(additional_information = str_remove(additional_information, "Date: ")) %>% 
+    pull(additional_information) %>% 
+    paste0(collapse = ", ")
+
+  msg_future_date <- glue("**FUTURE DATE ERROR**:
+                          Your submission had {count_error('err_pd_future-date')} rows with a date in the future, ahead of what is included in the meta tab. The date entered here does not fall within the periods available for submission. Please review the issues in the submission and resubmit with a correct dates within the period.The dates outside this period included: 
+  \n{future_dates}")
+  }
+
+```
+
+`r if(is_error("err_pd_future-date")){msg_future_date}`
+
 ```{r agg_mismatch, include=FALSE}
+
 if(is_error("err_val_aggregation-mismatch")){
   agg_mismatch <- df_err_sbmsn %>%
     filter(validation_type == "err_val_aggregation-mismatch") %>% 
