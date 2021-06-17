@@ -287,6 +287,23 @@ if(is_error("err_pd_multiple-periods")){
 
 `r if(is_error("err_pd_multiple-periods")){msg_multi}`
 
+```{r agg_mismatch, include=FALSE}
+if(is_error("err_val_aggregation-mismatch")){
+  agg_mismatch <- df_err_sbmsn %>%
+    filter(validation_type == "err_val_aggregation-mismatch") %>% 
+    distinct(orgunit, orgunituid, additional_information) %>% 
+    mutate(info = glue("Site: {orgunit} ({orgunituid}), {additional_information}")) %>% 
+    pull() %>% 
+    paste0(collapse = " \n")
+  
+  msg_agg_mismatch <- glue("**AGGREGATION MISMATCH ERROR**:
+                           The submission include both weekly and aggregated monthly data that were not equal. Any values that have both monthly and weekly submission but do not match will not be accepted in the database. These must be resolved or the data will not be included in the HFR database. Please update either the week or month results and resubmit in the following instances
+                           \n{agg_mismatch}")
+    
+}
+```
+
+`r if(is_error("err_val_aggregation-mismatch")){msg_agg_mismatch}`
 
 ```{r nonnumeric_val, include=FALSE}
 
