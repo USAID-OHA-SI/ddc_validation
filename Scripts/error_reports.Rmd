@@ -131,7 +131,7 @@ if(is_error("err_tmp_invalid-column")){
 
 `r if(is_error("err_tmp_invalid-column")){msg_invalid_col}`
 
-```{r blank_tab}
+```{r blank_tab, include=FALSE}
 if(is_error("err_tmp_no-data")){
   issue_blank <- df_err_sbmsn %>%
     filter(validation_type == "err_tmp_no-data") %>% 
