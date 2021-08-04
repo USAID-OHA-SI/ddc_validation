@@ -41,7 +41,7 @@ library(fs)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-06-15'
+    pdate <- '2021-07-19'
   
     curr_date <- ymd(Sys.Date())
   
@@ -264,11 +264,16 @@ library(fs)
   #open google drive folder to move files to archive
     drive_browse(as_id(gdrive_fldr))
 
+  #rename any with an apostrophe in the filename
+    file_rn <- list.files(path = "markdown","'", full.names = TRUE)
+    if(length(file_rn) > 0)
+      file.rename(file, str_remove(file, "'"))
+    
   #identify reports that were created
     printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
   
   #push to GDrive
-    walk(.x = printed_reports,
+    walk(.x = printed_reports[39:70],
          .f = ~ drive_upload(.x, 
                             path = as_id(gdrive_fldr), 
                             name = str_remove(basename(.x), ".docx"),
