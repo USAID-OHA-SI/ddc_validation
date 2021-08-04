@@ -1,9 +1,9 @@
 ## PROJECT: ddc_validation
 ## AUTHOR:  B.Kagniniwa | USAID
-## PURPOSE: Quick look at the outputs
+## PURPOSE: Quick look at DDC/HFR ETL Outputs
 ## LICENSE: MIT
-## DATE:    2020-06-02
-## UPDATE:  2020-06-07
+## DATE:    2021-06-02
+## UPDATE:  2021-08-03
 
 # LIBRARIES ----
 
@@ -625,6 +625,10 @@
   conn
   conn %>% summary()
   
+  conn %>% 
+    db_describe() %>% 
+    prinf()
+  
   ## Disconnect
   #DBI::dbDisconnect(conn)
 
@@ -642,38 +646,30 @@
   #conn %>% dplyr::db_list_tables()
   
   # Make sure table exists
-  conn %>% DBI::dbExistsTable('mtcars')
-  conn %>% DBI::dbExistsTable('iris')
+  conn %>% DBI::dbExistsTable('hfr_data')
+  conn %>% DBI::dbExistsTable('sitelist')
   
   # List out table columns
-  conn %>% DBI::dbListFields('mtcars')
-  conn %>% dplyr::tbl('mtcars') %>% colnames()
+  conn %>% DBI::dbListFields('sitelist')
+  conn %>% dplyr::tbl('sitelist') %>% colnames()
   
   # Show SQL Query
-  conn %>% dplyr::tbl('mtcars') %>% show_query()
+  conn %>% dplyr::tbl('sitelist') %>% show_query()
+  
+  conn %>% dplyr::tbl('sitelist') %>% glimpse()
   
   conn %>% 
-    dplyr::tbl('mtcars') %>% 
-    filter(cyl > 4) %>% 
+    dplyr::tbl('sitelist') %>% 
+    filter(mech_code == '84223') %>% 
     show_query()
   
   conn %>% 
-    dplyr::tbl('mtcars') %>% 
-    count(name, cyl) %>% 
-    arrange(desc(cyl), name) %>% 
-    show_query() 
-  
-  conn %>% 
-    dplyr::tbl('mtcars') %>% 
+    dplyr::tbl('sitelist') %>% 
     explain()
   
   conn %>% 
-    tbl('mtcars') %>% 
-    glimpse()
-  
-  conn %>% 
-    db_describe() %>% 
-    prinf()
+    dplyr::tbl('sitelist') %>% 
+    filter(mech_code == '84223')
 
 
 # LAOD DATA ----
@@ -729,8 +725,22 @@
   ## mechs
   tbl(conn, tbl_mechs) %>% glimpse()
   
+  tbl(conn, tbl_mechs) %>% 
+    filter(operatingunit == 'Dominican Republic') %>% 
+    distinct(mech_code, mech_name)
+  
+  tbl(conn, tbl_mechs) %>% 
+    filter(operatingunit == 'Dominican Republic',
+           mech_code == '84223') %>% view()
+  
   ## sites
   tbl(conn, tbl_sites) %>% glimpse()
+  
+  tbl(conn, tbl_sites) %>%
+    filter(mech_code %in% c(''))
+  
+  tbl(conn, tbl_sites) %>%
+    filter(mech_code == '84223')
   
   ## targets
   tbl(conn, tbl_targets) %>% glimpse()
@@ -753,11 +763,21 @@
   ## Submissions status
   tbl(conn, tbl_subms_status) %>% glimpse()
   
+  tbl(conn, tbl_subms_status) %>% 
+    filter(countryname == 'Dominican Republic',
+           hfr_pd == '09') %>% view()
+  
   ## Mechanism details
   tbl(conn, tbl_mechs_status) %>% glimpse()
   
+  
   ## Submissions Detailed Errors
   tbl(conn, tbl_subms_errors) %>% glimpse()
+  
+  tbl(conn, tbl_subms_errors) %>% 
+    filter(countryname == 'Dominican Republic',
+           hfr_pd == '09') %>% view()
+  
   
   ## HFR Outputs
   df_out %>% 
