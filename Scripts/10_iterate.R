@@ -41,7 +41,7 @@ library(fs)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-07-19'
+    pdate <- '2021-08-17'
   
     curr_date <- ymd(Sys.Date())
   
@@ -267,13 +267,13 @@ library(fs)
   #rename any with an apostrophe in the filename
     file_rn <- list.files(path = "markdown","'", full.names = TRUE)
     if(length(file_rn) > 0)
-      file.rename(file, str_remove(file, "'"))
+      file.rename(file_rn, str_remove(file_rn, "'"))
     
   #identify reports that were created
     printed_reports <- list.files(here("markdown"), "docx", full.names = TRUE)
   
   #push to GDrive
-    walk(.x = printed_reports[39:70],
+    walk(.x = printed_reports,
          .f = ~ drive_upload(.x, 
                             path = as_id(gdrive_fldr), 
                             name = str_remove(basename(.x), ".docx"),
