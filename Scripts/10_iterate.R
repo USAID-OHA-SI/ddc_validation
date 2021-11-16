@@ -41,7 +41,7 @@ library(fs)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-08-17'
+    pdate <- '2021-10-26'
   
     curr_date <- ymd(Sys.Date())
   

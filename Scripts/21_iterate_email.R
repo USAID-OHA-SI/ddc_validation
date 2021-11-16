@@ -24,7 +24,6 @@ library(glitr)
 library(extrafont)
 
 
-
 # GLOBAL VARIABLES --------------------------------------------------------
 
   load_secrets()
@@ -70,29 +69,32 @@ library(extrafont)
   
   #limit time period
   df_hfr_agg <- df_hfr %>% 
-    filter(countryname == "Tanzania",
-           date >= curr_date - months(6))
+    filter(date >= curr_date - months(6))
   
   #combine OU and countryname for regional missions
   df_hfr_agg <- df_hfr_agg %>%
     mutate(countryname = ifelse(operatingunit == countryname, 
-                                operatingunit, glue("{operatingunit}/{countryname}")), 
-           val = ifelse(is.na(val), 0, val)) 
+                                operatingunit, glue("{operatingunit}/{countryname}"))) %>% 
+    rename(hfr_results = val)
   
   #aggregate to the date x orgunit x mech x indicator level
   df_hfr_comp <- df_hfr_agg %>% 
+    mutate(has_value = ifelse(!is.na(hfr_results), 1L, 0L)) %>% 
     group_by(countryname, orgunituid, date, 
-             mech_code, expect_reporting, indicator) %>% 
-    summarise(across(c(hfr_results = val), sum, na.rm = TRUE), .groups = "drop")
+             mech_code, indicator, expect_reporting) %>%
+    summarise(hfr_results = sum(hfr_results, na.rm = TRUE),
+              has_value = sum(has_value, na.rm = TRUE)) %>% 
+    ungroup()
   
   #classify sites and reporting
   df_hfr_comp <- df_hfr_comp %>% 
-    group_by(orgunituid, mech_code) %>% 
-    mutate(has_hfr_reporting = ifelse(hfr_results > 0, TRUE, FALSE),
+    group_by(date, orgunituid, mech_code, indicator) %>% 
+    mutate(#has_hfr_reporting = ifelse(hfr_results > 0, TRUE, FALSE),
+           has_hfr_reporting = ifelse(has_value > 0, TRUE, FALSE),
            is_datim_site = expect_reporting == TRUE) %>% 
     ungroup() %>% 
-    filter(!(has_hfr_reporting == TRUE & is_datim_site == FALSE)) %>% 
-    filter_at(vars(hfr_results, mer_results), any_vars(.!=0))
+    tidylog::filter(!(has_hfr_reporting == TRUE & is_datim_site == FALSE)) 
+
   
   #aggregate across all sites in countryname across indicator and period
   df_hfr_comp <- df_hfr_comp %>% 
@@ -109,26 +111,26 @@ library(extrafont)
 # MUNGE HFR RESULTS -------------------------------------------------------
 
   df_hfr_viz <- df_hfr_agg %>%
-    mutate(indicator = ifelse(indicator == "TX_MMD", glue("{indicator} {otherdisaggregate}"), indicator)) %>% 
-    filter(indicator %ni% c("TX_MMD NA", "TX_MMD <3 months")) %>% 
-    group_by(countryname, date, indicator) %>% 
+    mutate(ind_alt = ifelse(indicator == "TX_MMD", glue("{indicator} {otherdisaggregate}"), indicator)) %>% 
+    filter(ind_alt %ni% c("TX_MMD NA", "TX_MMD <3 months")) %>% 
+    group_by(countryname, date, indicator, ind_alt) %>% 
     summarise(hfr_results = sum(val, na.rm = TRUE)) %>% 
     ungroup()
   
   df_hfr_viz <- df_hfr_viz %>% 
-    mutate(group = case_when(indicator %in% c("HTS_TST_POS", "TX_NEW") ~ "Testing & Linkage",
-                             str_detect(indicator, "TX") ~ "Treatment",
-                             TRUE ~ indicator),
-           indicator = factor(indicator, c("PrEP_NEW","VMMC_CIRC",
-                                           "HTS_TST", "HTS_TST_POS", "TX_NEW",  
-                                           "TX_CURR", "TX_MMD 3-5 months", "TX_MMD 6 months or more"))) %>% 
+    mutate(group = case_when(ind_alt %in% c("HTS_TST_POS", "TX_NEW") ~ "Testing & Linkage",
+                             str_detect(ind_alt, "TX") ~ "Treatment",
+                             TRUE ~ ind_alt),
+           ind_alt = factor(ind_alt, c("PrEP_NEW","VMMC_CIRC",
+                                       "HTS_TST", "HTS_TST_POS", "TX_NEW",  
+                                       "TX_CURR", "TX_MMD 3-5 months", "TX_MMD 6 months or more"))) %>% 
     group_by(countryname, group) %>% 
     mutate(grp_max = max(hfr_results, na.rm = TRUE)) %>% 
     ungroup() %>% 
-    mutate(group = case_when(indicator == "HTS_TST" ~ "Testing & Linkage",
-                             indicator %in% c("PrEP_NEW","VMMC_CIRC") ~"Prevention",
+    mutate(group = case_when(ind_alt == "HTS_TST" ~ "Testing & Linkage",
+                             ind_alt %in% c("PrEP_NEW","VMMC_CIRC") ~"Prevention",
                              TRUE ~ "group"),
-           fill_color_rug = case_when(indicator == "PrEP_NEW" ~ old_rose,
+           fill_color_rug = case_when(ind_alt == "PrEP_NEW" ~ old_rose,
                                       TRUE ~ scooter_med),
            lab_com = "78%",
            lab_pd = case_when(date == max(date) ~ label_number_si()(hfr_results)))
@@ -138,16 +140,16 @@ library(extrafont)
 
   
   df_hfr_viz %>% 
-    filter(str_detect(indicator, "TX_(C|M)")) %>% 
+    # filter(str_detect(ind_alt, "TX_(C|M)")) %>% 
     ggplot(aes(date, hfr_results)) +
     geom_blank(aes(y = grp_max)) +
     geom_col(fill = scooter) +
-    # geom_label(aes(y = grp_max*1.15, label = lab_com), 
-    geom_text(aes(label = lab_pd), vjust = -.8, na.rm = TRUE,
-               family = "Source Sans Pro SemiBold", color = scooter) +
-    geom_label(aes(y = 0, label = lab_com), 
-               family = "Source Sans Pro", color = "#505050") +
-    facet_wrap(~indicator, scales = "free_y") +
+    # geom_text(aes(label = lab_pd), vjust = -.8, na.rm = TRUE,
+    #            family = "Source Sans Pro SemiBold", color = scooter) +
+    # geom_label(aes(y = grp_max*1.15, label = lab_com),
+    # geom_label(aes(y = 0, label = lab_com), 
+    #            family = "Source Sans Pro", color = "#505050") +
+    facet_wrap(~ind_alt, scales = "free_y") +
     coord_cartesian(clip = "off") +
     scale_y_continuous(label = label_number_si()) +
     scale_x_date(date_breaks = "1 month", date_labels = "%b") +
