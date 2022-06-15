@@ -3,7 +3,7 @@
 ## PURPOSE:  iterate error reports
 ## LICENSE:  MIT
 ## DATE:     2020-11-19
-## UPDATED:  2021-04-26
+## UPDATED:  2022-06-15
 
 
 # DEPENDENCIES ------------------------------------------------------------
@@ -41,7 +41,7 @@ library(fs)
 
   # DDC / HFR Process Date
     
-    pdate <- '2021-10-26'
+    pdate <- '2022-06-15'
   
     curr_date <- ymd(Sys.Date())
   
@@ -49,93 +49,93 @@ library(fs)
     curr_mth <- month(curr_date)
   
   
-  # Raw submissions (latest files)
-    df_raws <- s3_objects(
-        bucket = bkt_name,
-        prefix = "ddc/uat/raw/hfr/archive",
-        n = Inf,
-        unpack_keys = TRUE
-      ) 
-  
-    df_raws <- df_raws %>% 
-      filter(last_modified >= pdate, 
-             nchar(sys_data_object) > 1,
-             str_detect(sys_data_object, ".xlsx$")) %>% 
-      select(key, filename = sys_data_object, last_modified) %>% 
-      arrange(filename) 
-
-    
-  # Raw Submissions - sheets
-    df_sheets <- df_raws %>% 
-      pull(key) %>%
-      map_dfr(function(x) {
-        tibble(
-          key_raw = x,
-          file_name = basename(x),
-          sheet_name = s3_excel_sheets(bkt_name, x))
-        
-      }) %>% 
-      filter(str_detect(str_to_lower(trimws(sheet_name)), "hfr")) %>% 
-      mutate(
-        sheet_name_clean = connect_text(
-          str_replace_all(sheet_name, " |,", ""), # comma should be removed
-          "_"),
-        filename = paste0(str_remove(file_name, ".xlsx$"), "_", sheet_name_clean)
-      ) %>% 
-      arrange(file_name) 
-    
-    # HFR Processed
-      df_procs <- glamr::s3_objects(
-          bucket = bkt_name,
-          prefix = "ddc/uat/processed/hfr/incoming/",
-          n = Inf,
-          unpack_keys = TRUE
-        ) %>% 
-        select(key_proc = key, filename = sys_data_object, last_modified) %>% 
-        filter(last_modified >= pdate,
-               str_detect(str_to_lower(filename), 
-                          "wide.csv$|long.csv$|limited.csv$")) %>%
-        arrange(filename) 
-    
-    # Compare S3 Sheets to Processed/hfr/incoming csv file
-      df_sheets_check <- df_sheets %>% 
-        left_join(
-          df_procs %>% 
-            mutate(
-              filename = str_remove(filename, 
-                                    "_Wide.csv$|_Long.csv|_Limited.csv$")
-            ), 
-          by = c("filename" = "filename")) %>% 
-        rename(proc_filename = filename) %>% 
-        arrange(file_name)
-        
-    # List of files not being processed
-      df_sheets_check %>%
-        filter(is.na(key_proc)) %>% 
-        distinct(file_name) %>% 
-        pull(file_name)
-      
-    # Download non-processed files
-      fkeys <- df_sheets_check %>%
-        filter(is.na(key_proc)) %>%  
-        distinct(key_raw) %>% 
-        pull(key_raw) 
-      
-      tmp <- dir_create(file_temp())
-      cat("downloaded files saved to", tmp)
-      
-      fkeys %>% 
-        map(~s3_download(bucket = bkt_name,
-                         object = .x,
-                         filepath = file.path(tmp, basename(.x))))
-      
-      raw_files <- list.files(tmp, ".xlsx$", full.names = TRUE)
-      
-    # Check meta tabs for unprocessed files
-      df_metadata <- raw_files %>% 
-        map_dfr(hfr_metadata) 
-      
-      #unlink(tmp, recursive = TRUE)
+  # # Raw submissions (latest files)
+  #   df_raws <- s3_objects(
+  #       bucket = bkt_name,
+  #       prefix = "ddc/uat/raw/hfr/archive",
+  #       n = Inf,
+  #       unpack_keys = TRUE
+  #     ) 
+  # 
+  #   df_raws <- df_raws %>% 
+  #     filter(last_modified >= pdate, 
+  #            nchar(sys_data_object) > 1,
+  #            str_detect(sys_data_object, ".xlsx$")) %>% 
+  #     select(key, filename = sys_data_object, last_modified) %>% 
+  #     arrange(filename) 
+  # 
+  #   
+  # # Raw Submissions - sheets
+  #   df_sheets <- df_raws %>% 
+  #     pull(key) %>%
+  #     map_dfr(function(x) {
+  #       tibble(
+  #         key_raw = x,
+  #         file_name = basename(x),
+  #         sheet_name = s3_excel_sheets(bkt_name, x))
+  #       
+  #     }) %>% 
+  #     filter(str_detect(str_to_lower(trimws(sheet_name)), "hfr")) %>% 
+  #     mutate(
+  #       sheet_name_clean = connect_text(
+  #         str_replace_all(sheet_name, " |,", ""), # comma should be removed
+  #         "_"),
+  #       filename = paste0(str_remove(file_name, ".xlsx$"), "_", sheet_name_clean)
+  #     ) %>% 
+  #     arrange(file_name) 
+  #   
+  #   # HFR Processed
+  #     df_procs <- glamr::s3_objects(
+  #         bucket = bkt_name,
+  #         prefix = "ddc/uat/processed/hfr/incoming/",
+  #         n = Inf,
+  #         unpack_keys = TRUE
+  #       ) %>% 
+  #       select(key_proc = key, filename = sys_data_object, last_modified) %>% 
+  #       filter(last_modified >= pdate,
+  #              str_detect(str_to_lower(filename), 
+  #                         "wide.csv$|long.csv$|limited.csv$")) %>%
+  #       arrange(filename) 
+  #   
+  #   # Compare S3 Sheets to Processed/hfr/incoming csv file
+  #     df_sheets_check <- df_sheets %>% 
+  #       left_join(
+  #         df_procs %>% 
+  #           mutate(
+  #             filename = str_remove(filename, 
+  #                                   "_Wide.csv$|_Long.csv|_Limited.csv$")
+  #           ), 
+  #         by = c("filename" = "filename")) %>% 
+  #       rename(proc_filename = filename) %>% 
+  #       arrange(file_name)
+  #       
+  #   # List of files not being processed
+  #     df_sheets_check %>%
+  #       filter(is.na(key_proc)) %>% 
+  #       distinct(file_name) %>% 
+  #       pull(file_name)
+  #     
+  #   # Download non-processed files
+  #     fkeys <- df_sheets_check %>%
+  #       filter(is.na(key_proc)) %>%  
+  #       distinct(key_raw) %>% 
+  #       pull(key_raw) 
+  #     
+  #     tmp <- dir_create(file_temp())
+  #     cat("downloaded files saved to", tmp)
+  #     
+  #     fkeys %>% 
+  #       map(~s3_download(bucket = bkt_name,
+  #                        object = .x,
+  #                        filepath = file.path(tmp, basename(.x))))
+  #     
+  #     raw_files <- list.files(tmp, ".xlsx$", full.names = TRUE)
+  #     
+  #   # Check meta tabs for unprocessed files
+  #     df_metadata <- raw_files %>% 
+  #       map_dfr(hfr_metadata) 
+  #     
+  #     #unlink(tmp, recursive = TRUE)
     
 # DOWNLOAD ----------------------------------------------------------------
 
@@ -208,22 +208,22 @@ library(fs)
                str_replace(" - ", " [") %>% 
                paste0("]"))
     
-  # Check if non-processed files were reported in error outputs
-    df_sheets_check %>%
-      filter(is.na(key_raw)) %>% 
-      distinct(file_name) %>% 
-      mutate(file_name = str_remove(file_name, " - .*")) %>% 
-      left_join(df_stat, by = "file_name") %>% 
-      filter(is.na(operatingunit)) %>% 
-      pull(file_name)
-    
-    df_sheets_check %>%
-      filter(is.na(key_raw)) %>% 
-      distinct(file_name) %>% 
-      mutate(file_name = str_remove(file_name, " - .*")) %>% 
-      left_join(df_err, by = "file_name") %>% 
-      filter(is.na(processed_date)) %>% 
-      pull(file_name)
+  # # Check if non-processed files were reported in error outputs
+  #   df_sheets_check %>%
+  #     filter(is.na(key_raw)) %>% 
+  #     distinct(file_name) %>% 
+  #     mutate(file_name = str_remove(file_name, " - .*")) %>% 
+  #     left_join(df_stat, by = "file_name") %>% 
+  #     filter(is.na(operatingunit)) %>% 
+  #     pull(file_name)
+  #   
+  #   df_sheets_check %>%
+  #     filter(is.na(key_raw)) %>% 
+  #     distinct(file_name) %>% 
+  #     mutate(file_name = str_remove(file_name, " - .*")) %>% 
+  #     left_join(df_err, by = "file_name") %>% 
+  #     filter(is.na(processed_date)) %>% 
+  #     pull(file_name)
 
  # ITERATE -----------------------------------------------------------------
 
@@ -264,6 +264,10 @@ library(fs)
   #open google drive folder to move files to archive
     drive_browse(as_id(gdrive_fldr))
 
+    old_files <- drive_ls(as_id(gdrive_fldr), type = "document")$id
+    walk(old_files, 
+         ~ drive_mv(.x, as_id("1xebMO8O51_42ETGAAf1SEPCe0FspD-kR"))) 
+    
   #rename any with an apostrophe in the filename
     file_rn <- list.files(path = "markdown","'", full.names = TRUE)
     if(length(file_rn) > 0)
