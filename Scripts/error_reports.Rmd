@@ -3,7 +3,7 @@ title: "HFR Error Report"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: word_document
 params:
-  filename: "HFR_FY21_Jan_Cameroon_ CHAMP_20210215"
+  filename: "HFR_FY23_Dec_Tanzania_20220125 [Nyaso Mkate 20230125 075032]"
 ---
 
 
@@ -37,7 +37,7 @@ df_stat_sbmsn <- df_stat %>%
 pd <- df_err_sbmsn %>% 
   filter(validation_type != "err_pd_multiple-periods") %>% 
   count(hfr_pd, sort = TRUE) %>%
-  slice(n = 1) %>% 
+  slice_head(n = 1) %>% 
   pull(hfr_pd)
 
 file <- unique(df_err_sbmsn$file_name)
